@@ -5,7 +5,7 @@ Automates the processing of DnD session recordings from Google Meet, generating 
 ## Features
 
 - Downloads session recordings from Gmail/Google Drive
-- Automatically organizes sessions by date
+- Automatically creates organized session directories
 - Extracts audio from video recordings
 - Generates transcripts using OpenAI's Whisper API
 - Processes transcripts into structured narrative session notes:
@@ -19,13 +19,13 @@ Automates the processing of DnD session recordings from Google Meet, generating 
 
 ## Directory Structure
 
-The processor automatically creates a structured directory based on the meeting recording filename. For example:
+The processor automatically creates an organized directory structure based on the meeting recording filename:
 
 Input filename: `"DnD - 2025-01-10 18-41 CST - Recording.mp4"`
-Creates directory structure:
+Creates:
 ```
-dnd_sessions/
-    2025_01_10/
+output/
+    dnd_sessions_2025_01_10/
         DnD - 2025-01-10 18-41 CST - Recording.mp4
         raw_transcript_20250110_184100.txt
         processed_notes_20250110_184100.txt
@@ -55,13 +55,18 @@ sudo apt-get install ffmpeg
 
 ## Configuration
 
-1. Set up Google Cloud Project:
+1. Set up credentials directory:
+```bash
+mkdir .credentials
+```
+
+2. Set up Google Cloud Project:
    - Create project in Google Cloud Console
    - Enable Drive API and Docs API
    - Create OAuth 2.0 credentials
-   - Download credentials as `credentials.json`
+   - Download credentials and save as `.credentials/credentials.json`
 
-2. Create `config.json`:
+3. Create `.credentials/config.json`:
 ```json
 {
     "email": {
@@ -71,6 +76,14 @@ sudo apt-get install ffmpeg
     },
     "openai_api_key": "your_openai_api_key"
 }
+```
+
+The `.credentials` directory will contain:
+```
+.credentials/
+    config.json          # Your configuration
+    credentials.json     # Google OAuth credentials
+    token.json          # Generated OAuth token (created automatically)
 ```
 
 ## Usage
@@ -95,13 +108,13 @@ python main.py process --subject "DnD Thursday Session"
 ### Manage Temporary Files
 ```bash
 # List temp directories
-python main.py list -o dnd_sessions/2025_01_10
+python main.py list
 
 # Clean up old temp files (>24 hours)
-python main.py clean -o dnd_sessions/2025_01_10
+python main.py clean
 
 # Clean up with custom age
-python main.py clean -o dnd_sessions/2025_01_10 --age 48
+python main.py clean --age 48
 ```
 
 ### Individual Components
@@ -110,23 +123,23 @@ Each component can be run independently:
 
 1. Download recording:
 ```bash
-python email_handler.py -o dnd_sessions/2025_01_10
+python email_handler.py -o output/dnd_sessions_2025_01_10
 ```
 
 2. Extract audio:
 ```bash
-python audio_processor.py -i "dnd_sessions/2025_01_10/DnD Session.mp4" -o dnd_sessions/2025_01_10
+python audio_processor.py -i "output/dnd_sessions_2025_01_10/DnD Session.mp4" -o output/dnd_sessions_2025_01_10
 ```
 
 3. Generate transcript:
 ```bash
-python transcriber.py -i audio.mp3 -o dnd_sessions/2025_01_10
+python transcriber.py -i audio.mp3 -o output/dnd_sessions_2025_01_10
 ```
 
 4. Process transcript and generate notes:
 ```bash
 # Basic processing
-python transcript_processor.py -i raw_transcript.txt -o dnd_sessions/2025_01_10
+python transcript_processor.py -i raw_transcript.txt -o output/dnd_sessions_2025_01_10
 
 # Analyze speakers and characters
 python transcript_processor.py -i transcript.txt --analyze-speakers
@@ -149,7 +162,7 @@ python main.py process
 
 The processor will:
 1. Download the latest session recording from Gmail
-2. Create a directory structure based on the session date
+2. Create a session directory under output/ based on the recording date
 3. Extract the audio track
 4. Generate a raw transcript
 5. Process the transcript into structured notes
@@ -159,9 +172,10 @@ The processor will:
 ## Troubleshooting
 
 1. Authentication Issues:
-   - Delete token.json to force re-authentication
+   - Delete `.credentials/token.json` to force re-authentication
    - Ensure APIs are enabled in Google Cloud Console
-   - Check credentials.json is present and valid
+   - Check `.credentials/credentials.json` is present and valid
+   - Verify permissions on `.credentials` directory
 
 2. File Processing:
    - Verify ffmpeg installation for audio extraction
@@ -169,7 +183,7 @@ The processor will:
    - Use --keep-temp for debugging
 
 3. Directory Structure:
-   - If filename parsing fails, defaults to 'meeting_outputs'
+   - If filename parsing fails, defaults to output/session_default
    - Check file permissions if directory creation fails
    - Manually specify output directory with -o if needed
 
