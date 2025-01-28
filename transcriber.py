@@ -1,6 +1,7 @@
+from typing import Tuple
 import openai
 import json
-import logging
+from pydub import AudioSegment
 import argparse
 import os
 from utils import setup_logging, save_text_output
@@ -11,7 +12,7 @@ class Transcriber:
         self.client = openai.OpenAI(api_key=api_key)
         self.model = "gpt-4o"
 
-    def get_transcript(self, audio_path, output_dir=None):
+    def get_transcript(self, audio_path, output_path) -> Tuple[str, str]:
         """
         Generate transcript using OpenAI's Whisper API
         
@@ -22,12 +23,32 @@ class Transcriber:
         Returns:
             tuple: (transcript text, path to saved file if output_dir provided)
         """
+        # if file already exists, return the content
+        if os.path.exists(output_path):
+            with open(output_path, 'r') as f:
+                return f.read(), output_path
         self.logger.info(f"Generating transcript for audio: {audio_path}")
         
         try:
             # Verify transcript file exists
             if not os.path.exists(audio_path):
                 raise FileNotFoundError(f"Audio file not found: {audio_path}")
+            max_size = 25 * 1024 * 1024  # 25MB in bytes
+
+            # Check if file exceeds size limit
+            if os.path.getsize(audio_path) > max_size:
+                # Create a compressed version
+                compressed_path = "compressed_audio.mp3"
+                audio = AudioSegment.from_file(audio_path)
+                
+                # Compress to 64kbps MP3 (adjust bitrate as needed)
+                audio.export(compressed_path, format="mp3", bitrate="64k")
+                
+                # Verify compressed file size
+                if os.path.getsize(compressed_path) > max_size:
+                    raise ValueError("Compressed file still exceeds size limit")
+                
+                audio_path = compressed_path  # Use compressed file
             
             # Generate transcript using Whisper
             with open(audio_path, 'rb') as audio_file:
@@ -41,8 +62,9 @@ class Transcriber:
             self.logger.debug(f"Transcript length: {len(transcript)} characters")
             
             # Save transcript if output directory provided
-            if output_dir:
-                filepath = save_text_output(transcript, "raw_transcript", output_dir)
+            if output_path:
+                filepath = save_text_output(transcript, output_path)
+                self.logger.info(f"Transcript saved to: {filepath}")
                 return transcript, filepath
             
             return transcript, None
