@@ -8,7 +8,7 @@ import shutil
 import tempfile
 
 class AudioProcessor:
-    def __init__(self):
+    def __init__(self, output_dir="output"):
         self.logger = setup_logging('AudioProcessor')
         self.MAX_CHUNK_SIZE = 24 * 1024 * 1024  # 24MB to be safe
         self.temp_dirs = []  # Track temporary directories for cleanup
@@ -40,54 +40,51 @@ class AudioProcessor:
         if not os.access(audio_path, os.R_OK):
             raise PermissionError(f"No permission to read file: {audio_path}")
 
-    def extract_audio(self, video_path, output_dir):
+    def extract_audio(self, video_path) -> str:
         """Extract audio from video file"""
         self.logger.info(f"Extracting audio from video: {video_path}")
-        
+        # Create audiofile path from video file
+        output_file = os.path.splitext(video_path)[0] + ".mp3"
         try:
             # Verify input file
             if not os.path.exists(video_path):
                 raise FileNotFoundError(f"Video file not found: {video_path}")
             
             # Create output directory
-            os.makedirs(output_dir, exist_ok=True)
-            
+            if os.path.exists(output_file):
+                self.logger.warning(f"Audio file already exists: {output_file}")
+                return output_file 
             # Extract audio with progress bar
             video = VideoFileClip(video_path)
-            duration = video.duration
-            
-            with tqdm(total=100, desc="Extracting audio") as pbar:
-                def progress_callback(t):
-                    pbar.update(int(t * 100) - pbar.n)
-                
-                audio_path = os.path.join(output_dir, 'audio.mp3')
-                video.audio.write_audiofile(audio_path, 
-                                         logger=None,  # Disable moviepy's logging
-                                         progress_callback=progress_callback)
-            
+            video.audio.write_audiofile(output_file, logger=None)
             video.close()
-            self.logger.info(f"Successfully extracted audio to: {audio_path}")
-            return audio_path
+            self.logger.info(f"Successfully extracted audio to: {output_file}")
+            return output_file
             
         except Exception as e:
             self.logger.error(f"Error extracting audio: {str(e)}")
             raise
 
-    def split_audio(self, audio_path, output_dir):
+    def split_audio(self, audio_path):
         """
         Split audio file into chunks smaller than 25MB
         Returns list of paths to chunk files
         """
         self.logger.info(f"Splitting audio file: {audio_path}")
-        temp_dir = None
+        temp_dir = "output/audio_chunks"
         
         try:
+            # check if chucks already exist
+            if os.path.exists(temp_dir):
+                return [os.path.join(temp_dir, file) for file in os.listdir(temp_dir)]
+            
             # Verify input file
             self.verify_audio_file(audio_path)
             
-            # Create temporary directory for chunks
-            temp_dir = self.create_temp_dir()
-            
+            # # Create temporary directory for chunks
+            # temp_dir = self.create_temp_dir()
+            os.makedirs(temp_dir, exist_ok=True)
+
             # Load audio file
             self.logger.debug("Loading audio file...")
             audio = AudioSegment.from_mp3(audio_path)
@@ -142,42 +139,44 @@ class AudioProcessor:
                 self.cleanup()
             raise
 
-def main():
-    """Main function for testing audio processor independently"""
-    parser = argparse.ArgumentParser(description='Extract audio from video file')
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Extract and process audio from video files')
     parser.add_argument('--input', '-i', required=True, help='Path to the input video file')
     parser.add_argument('--output', '-o', help='Output directory', default='output')
     parser.add_argument('--keep-chunks', action='store_true', help='Keep temporary chunk files')
-    
-    args = parser.parse_args()
+    return parser.parse_args()
+
+def main(input_path: str, output_dir: str, keep_chunks: bool) -> str:
+    """Main function with typed inputs"""
     logger = setup_logging('AudioProcessorMain')
-    
     processor = AudioProcessor()
     try:
-        os.makedirs(args.output, exist_ok=True)
-        
+        os.makedirs(output_dir, exist_ok=True)
+
         # Extract audio
         logger.info("Extracting audio...")
-        audio_path = processor.extract_audio(args.input, args.output)
-        
+        audio_path = processor.extract_audio(input_path, output_dir)
+
         # Split audio if needed
         logger.info("Checking if splitting is needed...")
-        chunk_paths = processor.split_audio(audio_path, args.output)
-        
+        chunk_paths = processor.split_audio(audio_path, output_dir)
+
         if len(chunk_paths) > 1:
             logger.info(f"Audio split into {len(chunk_paths)} chunks:")
             for path in chunk_paths:
                 logger.info(f"  - {path}")
         else:
             logger.info("No splitting needed")
-            
+
     except Exception as e:
         logger.error(f"Processing failed: {str(e)}")
         raise
-    
+
     finally:
-        if not args.keep_chunks:
+        if not keep_chunks:
             processor.cleanup()
+    return audio_path
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args.input, args.output, args.keep_chunks)

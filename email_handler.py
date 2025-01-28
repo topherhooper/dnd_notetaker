@@ -57,7 +57,7 @@ class EmailHandler:
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    'credentials.json', SCOPES)
+                    '.credentials/credentials.json', SCOPES)
                 creds = flow.run_local_server(port=0)
             
             # Save credentials
@@ -163,22 +163,19 @@ class EmailHandler:
             file_metadata = self.drive_service.files().get(fileId=file_id).execute()
             original_name = file_metadata['name']
             safe_filename = self.sanitize_filename(original_name)
-            file_size = int(file_metadata.get('size', 0))
             
             self.logger.info(f"Found Drive file: {original_name}")
-            self.logger.info(f"File size: {file_size / (1024*1024):.2f} MB")
             
+            # Create download directory if it doesn't exist
+            os.makedirs(download_dir, exist_ok=True)
+
             # Check if file already exists
             filepath = os.path.join(download_dir, safe_filename)
             if os.path.exists(filepath):
-                existing_size = os.path.getsize(filepath)
-                if existing_size == file_size:
-                    self.logger.info(f"File already exists with matching size: {filepath}")
-                    return filepath
-                else:
-                    self.logger.info(f"File exists but size differs. Redownloading...")
+                self.logger.info(f"File already exists: {filepath}")
+                return filepath
             else:
-                self.logger.info("File doesn't exist. Downloading...")
+                self.logger.info(f"File doesn't exist at {filepath}. Downloading...")
 
             # Download file
             request = self.drive_service.files().get_media(fileId=file_id)

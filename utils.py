@@ -1,7 +1,12 @@
+import json
 import os
 import logging
-from datetime import datetime
+import functools
 
+def load_config(config_path:str) -> dict:
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    return config
 def setup_logging(name):
     """Configure logging with timestamps and appropriate formatting"""
     logging.basicConfig(
@@ -13,7 +18,7 @@ def setup_logging(name):
     )
     return logging.getLogger(name)
 
-def save_text_output(content, prefix, output_dir):
+def save_text_output(content, output_filepath:str):
     """
     Save text content to a timestamped file in the output directory.
     
@@ -26,20 +31,35 @@ def save_text_output(content, prefix, output_dir):
         str: Path to the saved file
     """
     logger = setup_logging('Utils')
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-    logger.debug(f"Ensuring output directory exists: {output_dir}")
-    
-    # Generate timestamped filename
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{prefix}_{timestamp}.txt"
-    filepath = os.path.join(output_dir, filename)
-    
+
     # Save the content
-    logger.debug(f"Saving {prefix} to: {filepath}")
-    with open(filepath, "w", encoding='utf-8') as f:
+    logger.debug(f"Saving to: {output_filepath}")
+    with open(output_filepath, "w", encoding='utf-8') as f:
         f.write(content)
     
-    logger.info(f"Saved {prefix} to: {filepath}")
-    return filepath
+    logger.info(f"Saved to: {output_filepath}")
+    return output_filepath
+
+def cache_to_file(filepath):
+    """Caches function results to a specific file."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Create directory if it doesn't exist
+            cache_dir = os.path.dirname(filepath)
+            if cache_dir:  # Only create if path has a directory component
+                os.makedirs(cache_dir, exist_ok=True)
+            
+            # Check cache
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    return f.read()
+            
+            # Cache miss - execute function
+            result = func(*args, **kwargs)
+            save_text_output(str(result), filepath)
+            return result
+            
+        wrapper.clear_cache = lambda: os.remove(filepath) if os.path.exists(filepath) else None
+        return wrapper
+    return decorator
