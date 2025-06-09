@@ -2,8 +2,11 @@ import argparse
 import json
 import logging
 import os
+import re
+from typing import Dict, List, Tuple
 
 import openai
+import tiktoken
 
 from .utils import save_text_output, setup_logging
 
@@ -12,211 +15,361 @@ class TranscriptProcessor:
     def __init__(self, api_key):
         self.logger = setup_logging("TranscriptProcessor")
         self.client = openai.OpenAI(api_key=api_key)
-        self.model = "gpt-4o"
+        self.cleaning_model = "gpt-3.5-turbo"  # Cheaper model for initial cleaning
+        self.processing_model = "gpt-4o"  # Better model for final processing
+        self.encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        self.max_tokens_per_chunk = 3000  # Safe chunk size
 
-    def process_transcript(self, transcript_path, output_dir=None):
-        """
-        Post-process the raw transcript to clean and structure it
+    def detect_and_remove_garbled_text(self, text: str) -> str:
+        """Remove obviously garbled or repetitive text patterns"""
+        # Remove lines with excessive repetition (like "Mae Mae Mae...")
+        lines = text.split("\n")
+        cleaned_lines = []
 
-        Args:
-            transcript_path (str): Path to the raw transcript file
-            output_dir (str, optional): Directory to save the processed transcript
+        for line in lines:
+            # Skip lines that are mostly repetitive words
+            words = line.split()
+            if len(words) > 5:
+                # Check if more than 50% of words are the same
+                word_counts = {}
+                for word in words:
+                    word_counts[word] = word_counts.get(word, 0) + 1
+                max_count = max(word_counts.values()) if word_counts else 0
+                if max_count > len(words) * 0.5:
+                    self.logger.debug(f"Skipping repetitive line: {line[:50]}...")
+                    continue
 
-        Returns:
-            tuple: (processed transcript text, path to saved file if output_dir provided)
-        """
+            # Skip lines that appear to be in a foreign language (non-English)
+            # Simple heuristic: check for common English words
+            english_indicators = [
+                "the",
+                "and",
+                "is",
+                "to",
+                "of",
+                "a",
+                "in",
+                "that",
+                "it",
+                "for",
+            ]
+            has_english = any(word.lower() in english_indicators for word in words[:20])
+
+            # If line is long and has no English indicators, might be foreign
+            if len(words) > 10 and not has_english:
+                # Additional check for Welsh/Celtic patterns
+                welsh_patterns = [
+                    "mae",
+                    "yn",
+                    "dweud",
+                    "cyfrinwyr",
+                    "gwahanol",
+                    "rhaid",
+                ]
+                if any(pattern in line.lower() for pattern in welsh_patterns):
+                    self.logger.debug(f"Skipping non-English line: {line[:50]}...")
+                    continue
+
+            cleaned_lines.append(line)
+
+        return "\n".join(cleaned_lines)
+
+    def chunk_transcript(self, text: str) -> List[str]:
+        """Split transcript into manageable chunks for processing"""
+        # First, try to split by natural breaks (empty lines, scene changes)
+        sections = text.split("\n\n")
+        chunks = []
+        current_chunk = ""
+        current_tokens = 0
+
+        for section in sections:
+            section_tokens = len(self.encoding.encode(section))
+
+            # If adding this section would exceed limit, save current chunk
+            if (
+                current_tokens + section_tokens > self.max_tokens_per_chunk
+                and current_chunk
+            ):
+                chunks.append(current_chunk.strip())
+                current_chunk = section
+                current_tokens = section_tokens
+            else:
+                if current_chunk:
+                    current_chunk += "\n\n" + section
+                else:
+                    current_chunk = section
+                current_tokens += section_tokens
+
+        # Don't forget the last chunk
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+
+        self.logger.info(f"Split transcript into {len(chunks)} chunks")
+        return chunks
+
+    def clean_chunk(self, chunk: str) -> str:
+        """Clean individual chunk using cheaper model"""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.cleaning_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are cleaning up a D&D session transcript. Your job is to:
+                        1. Fix obvious transcription errors
+                        2. Remove filler words and false starts
+                        3. Add punctuation and paragraph breaks where appropriate
+                        4. Identify speakers where possible (use format "Speaker: dialogue")
+                        5. Remove technical interruptions or connection issues
+                        6. Keep all game-relevant content
+                        
+                        Do NOT summarize or remove content, just clean it up.""",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Clean up this transcript chunk:\n\n{chunk}",
+                    },
+                ],
+                temperature=0.3,
+                max_tokens=4000,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            self.logger.error(f"Error cleaning chunk: {str(e)}")
+            return chunk  # Return original if cleaning fails
+
+    def identify_speakers_and_characters(
+        self, cleaned_chunks: List[str]
+    ) -> Dict[str, str]:
+        """Analyze chunks to identify speakers and their characters"""
+        # Take samples from different parts of the transcript
+        samples = []
+        if len(cleaned_chunks) >= 3:
+            samples = [
+                cleaned_chunks[0][:1000],
+                cleaned_chunks[len(cleaned_chunks) // 2][:1000],
+                cleaned_chunks[-1][:1000],
+            ]
+        else:
+            samples = [chunk[:1000] for chunk in cleaned_chunks]
+
+        sample_text = "\n\n---\n\n".join(samples)
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.processing_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Analyze these D&D transcript samples to identify players and characters.",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Based on these samples, identify:
+                        1. The DM/GM
+                        2. Each player and their character name
+                        3. Any recurring NPCs
+                        
+                        Return as JSON format:
+                        {{
+                            "dm": "name",
+                            "players": {{"player_name": "character_name", ...}},
+                            "npcs": ["npc1", "npc2", ...]
+                        }}
+                        
+                        Samples:
+                        {sample_text}""",
+                    },
+                ],
+                temperature=0.3,
+            )
+
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            self.logger.error(f"Error identifying speakers: {str(e)}")
+            return {"dm": "DM", "players": {}, "npcs": []}
+
+    def create_session_summary(
+        self, cleaned_chunks: List[str], speaker_info: Dict
+    ) -> str:
+        """Create a comprehensive session summary from cleaned chunks"""
+        # Join chunks for final processing
+        full_text = "\n\n".join(cleaned_chunks)
+
+        # Estimate token count and potentially summarize if still too long
+        token_count = len(self.encoding.encode(full_text))
+
+        if token_count > 10000:
+            # If still too long, process in sections and combine
+            self.logger.info(
+                f"Transcript still large ({token_count} tokens), processing in sections"
+            )
+            return self.process_in_sections(cleaned_chunks, speaker_info)
+
+        try:
+            player_list = "\n".join(
+                [
+                    f"- {player} plays {char}"
+                    for player, char in speaker_info.get("players", {}).items()
+                ]
+            )
+
+            response = self.client.chat.completions.create(
+                model=self.processing_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""You are creating structured D&D session notes. 
+                        
+                        Known participants:
+                        DM: {speaker_info.get('dm', 'Unknown')}
+                        Players:
+                        {player_list}
+                        
+                        Create organized session notes with:
+                        1. Session recap/summary at the start
+                        2. Major story beats and encounters
+                        3. Character moments and roleplay highlights
+                        4. Combat encounters (if any)
+                        5. Important decisions made
+                        6. Treasure/items gained
+                        7. Plot hooks and unresolved threads
+                        8. Memorable quotes
+                        
+                        Use clear headings and maintain narrative flow.""",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Create session notes from this transcript:\n\n{full_text}",
+                    },
+                ],
+                temperature=0.5,
+                max_tokens=4000,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            self.logger.error(f"Error creating summary: {str(e)}")
+            raise
+
+    def process_in_sections(self, cleaned_chunks: List[str], speaker_info: Dict) -> str:
+        """Process very long transcripts in sections and combine"""
+        section_summaries = []
+
+        # Process every 3-4 chunks together
+        section_size = 3
+        for i in range(0, len(cleaned_chunks), section_size):
+            section = cleaned_chunks[i : i + section_size]
+            section_text = "\n\n".join(section)
+
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.processing_model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"""Summarize this section of a D&D session. Include:
+                            - Key events and encounters
+                            - Important dialogue and decisions
+                            - Combat outcomes
+                            - Character moments
+                            Keep the narrative flow.""",
+                        },
+                        {"role": "user", "content": section_text},
+                    ],
+                    temperature=0.5,
+                    max_tokens=1500,
+                )
+                section_summaries.append(response.choices[0].message.content)
+            except Exception as e:
+                self.logger.error(f"Error processing section {i}: {str(e)}")
+                section_summaries.append(f"[Error processing section {i}]")
+
+        # Combine section summaries into final notes
+        combined_summary = "\n\n---\n\n".join(section_summaries)
+
+        # Final pass to organize
+        try:
+            response = self.client.chat.completions.create(
+                model=self.processing_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """Combine these section summaries into cohesive session notes.
+                        Organize with clear headings and maintain chronological flow.
+                        Remove any redundancy between sections.""",
+                    },
+                    {"role": "user", "content": combined_summary},
+                ],
+                temperature=0.3,
+                max_tokens=4000,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            self.logger.error(f"Error in final organization: {str(e)}")
+            return combined_summary
+
+    def process_transcript(
+        self, transcript_path: str, output_dir: str = None
+    ) -> Tuple[str, str]:
+        """Main processing pipeline"""
         self.logger.info(f"Processing transcript: {transcript_path}")
 
         try:
-            # Verify transcript file exists
-            if not os.path.exists(transcript_path):
-                raise FileNotFoundError(f"Transcript file not found: {transcript_path}")
-
-            # Read raw transcript
+            # Read transcript
             with open(transcript_path, "r", encoding="utf-8") as f:
                 raw_transcript = f.read()
 
-            # System message for post-processing
-            system_message = """You are an expert at processing D&D session transcripts.
-            Your task is to clean up and structure raw transcription text to make it more
-            readable and suitable for summarization. You should:
+            self.logger.info(f"Read transcript: {len(raw_transcript)} characters")
 
-            1. Fix any obvious transcription errors
-            2. Add speaker labels where possible (DM, Player names)
-            3. Separate out-of-character (OOC) discussion
-            4. Mark important game mechanics moments (rolls, combat)
-            5. Identify the session recap section at the start
-            6. Remove irrelevant cross-talk or technical discussions
-            7. Preserve memorable quotes and funny moments
-            8. Structure the text into clear scenes or segments
-            
-            Maintain all the important content but make it clearer and more organized."""
+            # Step 1: Remove obviously garbled text
+            self.logger.info("Removing garbled text...")
+            cleaned_transcript = self.detect_and_remove_garbled_text(raw_transcript)
 
-            # Process the transcript
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {
-                        "role": "user",
-                        "content": f"Please process this raw D&D session transcript:\n\n{raw_transcript}",
-                    },
-                ],
-                temperature=0.3,  # Lower temperature for more consistent processing
-            )
+            # Step 2: Chunk the transcript
+            self.logger.info("Chunking transcript...")
+            chunks = self.chunk_transcript(cleaned_transcript)
 
-            processed_transcript = response.choices[0].message.content
-            self.logger.info("Successfully processed transcript")
+            # Step 3: Clean each chunk
+            self.logger.info("Cleaning chunks...")
+            cleaned_chunks = []
+            for i, chunk in enumerate(chunks):
+                self.logger.debug(f"Cleaning chunk {i+1}/{len(chunks)}")
+                cleaned_chunk = self.clean_chunk(chunk)
+                cleaned_chunks.append(cleaned_chunk)
 
-            # Save processed transcript if output directory provided
+            # Step 4: Identify speakers
+            self.logger.info("Identifying speakers...")
+            speaker_info = self.identify_speakers_and_characters(cleaned_chunks)
+            self.logger.info(f"Identified speakers: {speaker_info}")
+
+            # Step 5: Create final session notes
+            self.logger.info("Creating session summary...")
+            session_notes = self.create_session_summary(cleaned_chunks, speaker_info)
+
+            # Save output
             if output_dir:
-                filepath = save_text_output(
-                    processed_transcript, "processed_transcript", output_dir
+                # Save the cleaned transcript
+                cleaned_path = save_text_output(
+                    "\n\n".join(cleaned_chunks), "cleaned_transcript", output_dir
                 )
-                return processed_transcript, filepath
+                self.logger.info(f"Saved cleaned transcript to: {cleaned_path}")
 
-            return processed_transcript, None
+                # Save the session notes
+                notes_path = save_text_output(
+                    session_notes, "processed_notes", output_dir
+                )
+                self.logger.info(f"Saved session notes to: {notes_path}")
+
+                # Save speaker info
+                speaker_path = save_text_output(
+                    json.dumps(speaker_info, indent=2), "speaker_info", output_dir
+                )
+                self.logger.info(f"Saved speaker info to: {speaker_path}")
+
+                return session_notes, notes_path
+
+            return session_notes, None
 
         except Exception as e:
             self.logger.error(f"Error processing transcript: {str(e)}")
             raise
-
-    def analyze_speakers(self, transcript_path):
-        """
-        Analyze the transcript to identify and label different speakers
-        Returns a dictionary mapping speaker labels to likely player/character names
-        """
-        try:
-            with open(transcript_path, "r", encoding="utf-8") as f:
-                transcript = f.read()
-
-            prompt = """Analyze this D&D session transcript and identify:
-            1. Who is the DM
-            2. Player names and their character names
-            3. Any recurring NPCs that speak
-            
-            Return the information in a clear format."""
-
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are analyzing D&D session transcripts to identify speakers.",
-                    },
-                    {
-                        "role": "user",
-                        "content": f"{prompt}\n\nTranscript:\n{transcript}",
-                    },
-                ],
-                temperature=0.3,
-            )
-
-            return response.choices[0].message.content
-
-        except Exception as e:
-            self.logger.error(f"Error analyzing speakers: {str(e)}")
-            raise
-
-    def extract_mechanics(self, transcript_path):
-        """
-        Extract and organize game mechanics information (rolls, saves, etc.)
-        Returns a structured summary of mechanical events
-        """
-        try:
-            with open(transcript_path, "r", encoding="utf-8") as f:
-                transcript = f.read()
-
-            prompt = """Analyze this D&D session transcript and extract:
-            1. Important dice rolls and their outcomes
-            2. Combat encounters and initiative order
-            3. Skill checks and saving throws
-            4. Spell usage and effects
-            5. Any house rules or mechanical decisions made
-            
-            Organize this information in a clear format."""
-
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are analyzing D&D session transcripts to extract game mechanics information.",
-                    },
-                    {
-                        "role": "user",
-                        "content": f"{prompt}\n\nTranscript:\n{transcript}",
-                    },
-                ],
-                temperature=0.3,
-            )
-
-            return response.choices[0].message.content
-
-        except Exception as e:
-            self.logger.error(f"Error extracting mechanics: {str(e)}")
-            raise
-
-
-def main():
-    """Main function for testing transcript processor independently"""
-    logger = setup_logging("TranscriptProcessorMain")
-
-    parser = argparse.ArgumentParser(description="Process D&D session transcript")
-    parser.add_argument(
-        "--input", "-i", required=True, help="Path to the input transcript file"
-    )
-    parser.add_argument("--output", "-o", help="Output directory", default="output")
-    parser.add_argument(
-        "--config", help="Path to config file", default=".credentials/config.json"
-    )
-    parser.add_argument(
-        "--analyze-speakers", action="store_true", help="Analyze and identify speakers"
-    )
-    parser.add_argument(
-        "--extract-mechanics",
-        action="store_true",
-        help="Extract game mechanics information",
-    )
-
-    args = parser.parse_args()
-    logger.debug(f"Arguments parsed: {args}")
-
-    try:
-        # Load config for API key
-        with open(args.config, "r") as f:
-            config = json.load(f)
-        logger.debug("Config loaded successfully")
-
-        # Create output directory
-        os.makedirs(args.output, exist_ok=True)
-
-        processor = TranscriptProcessor(config["openai_api_key"])
-
-        if args.analyze_speakers:
-            speaker_analysis = processor.analyze_speakers(args.input)
-            filepath = save_text_output(
-                speaker_analysis, "speaker_analysis", args.output
-            )
-            logger.info(f"Speaker analysis saved to: {filepath}")
-            print("\nSpeaker Analysis:")
-            print(speaker_analysis)
-
-        elif args.extract_mechanics:
-            mechanics_info = processor.extract_mechanics(args.input)
-            filepath = save_text_output(mechanics_info, "mechanics_info", args.output)
-            logger.info(f"Mechanics information saved to: {filepath}")
-            print("\nMechanics Information:")
-            print(mechanics_info)
-
-        else:
-            _, filepath = processor.process_transcript(args.input, args.output)
-            logger.info(f"Processed transcript saved to: {filepath}")
-
-    except Exception as e:
-        logger.error(f"Processing failed: {str(e)}")
-        raise
-
-
-if __name__ == "__main__":
-    main()

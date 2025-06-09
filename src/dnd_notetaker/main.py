@@ -12,15 +12,11 @@ from .docs_uploader import DocsUploader
 from .email_handler import EmailHandler
 from .transcriber import Transcriber
 from .transcript_processor import TranscriptProcessor
-from .transcript_processor_multipersona import MultiPersonaTranscriptProcessor
-from .transcript_processor_v2 import ImprovedTranscriptProcessor
 from .utils import cleanup_old_temp_directories, list_temp_directories, setup_logging
 
 
 class MeetingProcessor:
-    def __init__(
-        self, config_path=".credentials/config.json", processor_type="improved"
-    ):
+    def __init__(self, config_path=".credentials/config.json"):
         self.logger = setup_logging("MeetingProcessor")
 
         try:
@@ -39,27 +35,9 @@ class MeetingProcessor:
             self.email_handler = EmailHandler(self.config["email"])
             self.audio_processor = AudioProcessor()
             self.transcriber = Transcriber(self.config["openai_api_key"])
-
-            # Choose transcript processor version
-            if processor_type == "multipersona":
-                self.logger.info("Using multi-persona transcript processor")
-                self.transcript_processor = MultiPersonaTranscriptProcessor(
-                    self.config["openai_api_key"]
-                )
-                self.processor_type = "multipersona"
-            elif processor_type == "improved":
-                self.logger.info("Using improved transcript processor")
-                self.transcript_processor = ImprovedTranscriptProcessor(
-                    self.config["openai_api_key"]
-                )
-                self.processor_type = "improved"
-            else:  # original
-                self.logger.info("Using original transcript processor")
-                self.transcript_processor = TranscriptProcessor(
-                    self.config["openai_api_key"]
-                )
-                self.processor_type = "original"
-
+            self.transcript_processor = TranscriptProcessor(
+                self.config["openai_api_key"]
+            )
             self.docs_uploader = DocsUploader()
 
             self.logger.debug("All components initialized successfully")
@@ -299,19 +277,12 @@ class MeetingProcessor:
                 pbar.update(1)
 
                 pbar.set_description("Processing transcript")
-                # Process transcript based on processor type
-                if self.processor_type == "multipersona":
-                    processed_notes, notes_path = (
-                        self.transcript_processor.process_transcript_multipersona(
-                            transcript_path, output_dir
-                        )
+                # Process transcript
+                processed_notes, notes_path = (
+                    self.transcript_processor.process_transcript(
+                        transcript_path, output_dir
                     )
-                else:
-                    processed_notes, notes_path = (
-                        self.transcript_processor.process_transcript(
-                            transcript_path, output_dir
-                        )
-                    )
+                )
                 self.logger.info("Transcript processed successfully")
                 pbar.update(1)
 
@@ -382,17 +353,6 @@ def main():
         "-d",
         help="Path to existing output directory (skips steps based on existing files)",
     )
-    process_parser.add_argument(
-        "--processor",
-        choices=["original", "improved", "multipersona"],
-        default="improved",
-        help="Transcript processor type (default: improved)",
-    )
-    process_parser.add_argument(
-        "--use-original-processor",
-        action="store_true",
-        help="DEPRECATED: Use --processor original instead",
-    )
 
     # Clean command
     clean_parser = subparsers.add_parser("clean", help="Clean up old temporary files")
@@ -415,16 +375,7 @@ def main():
     try:
         if args.command == "process":
             # Initialize processor
-            # Handle deprecated flag
-            if args.use_original_processor:
-                processor_type = "original"
-                logger.warning(
-                    "--use-original-processor is deprecated. Use --processor original instead."
-                )
-            else:
-                processor_type = args.processor
-
-            processor = MeetingProcessor(processor_type=processor_type)
+            processor = MeetingProcessor()
 
             # Process meeting
             logger.info("Starting meeting processing pipeline...")

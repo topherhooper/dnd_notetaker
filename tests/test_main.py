@@ -13,12 +13,10 @@ from dnd_notetaker.main import MeetingProcessor, main
 def patch_all_processors(func):
     """Helper decorator to patch all processors"""
     return patch("dnd_notetaker.main.DocsUploader")(
-        patch("dnd_notetaker.main.ImprovedTranscriptProcessor")(
-            patch("dnd_notetaker.main.TranscriptProcessor")(
-                patch("dnd_notetaker.main.Transcriber")(
-                    patch("dnd_notetaker.main.AudioProcessor")(
-                        patch("dnd_notetaker.main.EmailHandler")(func)
-                    )
+        patch("dnd_notetaker.main.TranscriptProcessor")(
+            patch("dnd_notetaker.main.Transcriber")(
+                patch("dnd_notetaker.main.AudioProcessor")(
+                    patch("dnd_notetaker.main.EmailHandler")(func)
                 )
             )
         )
@@ -46,7 +44,6 @@ class TestMeetingProcessor:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     @patch("dnd_notetaker.main.DocsUploader")
-    @patch("dnd_notetaker.main.ImprovedTranscriptProcessor")
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
@@ -57,35 +54,22 @@ class TestMeetingProcessor:
         mock_audio,
         mock_transcriber,
         mock_processor,
-        mock_improved_processor,
         mock_uploader,
     ):
-        # Test with improved processor (default)
         processor = MeetingProcessor(self.config_path)
 
         assert processor.config == self.config
         mock_email.assert_called_once_with(self.config["email"])
         mock_audio.assert_called_once()
         mock_transcriber.assert_called_once_with(self.config["openai_api_key"])
-        mock_improved_processor.assert_called_once_with(self.config["openai_api_key"])
-        mock_processor.assert_not_called()  # Original processor should not be called
-        mock_uploader.assert_called_once()
-
-        # Reset mocks
-        mock_improved_processor.reset_mock()
-        mock_processor.reset_mock()
-
-        # Test with original processor
-        processor = MeetingProcessor(self.config_path, processor_type="original")
         mock_processor.assert_called_once_with(self.config["openai_api_key"])
-        mock_improved_processor.assert_not_called()
+        mock_uploader.assert_called_once()
 
     def test_init_missing_config(self):
         with pytest.raises(FileNotFoundError, match="Config file not found"):
             MeetingProcessor("/non/existent/config.json")
 
     @patch("dnd_notetaker.main.DocsUploader")
-    @patch("dnd_notetaker.main.ImprovedTranscriptProcessor")
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
@@ -96,7 +80,6 @@ class TestMeetingProcessor:
         mock_audio,
         mock_transcriber,
         mock_processor,
-        mock_improved_processor,
         mock_uploader,
     ):
         # Write invalid JSON
@@ -148,7 +131,6 @@ class TestMeetingProcessor:
         assert result == os.path.join("output", "session_default")
 
     @patch("dnd_notetaker.main.DocsUploader")
-    @patch("dnd_notetaker.main.ImprovedTranscriptProcessor")
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
@@ -165,7 +147,6 @@ class TestMeetingProcessor:
         mock_audio,
         mock_transcriber,
         mock_processor,
-        mock_improved_processor,
         mock_uploader,
     ):
         # Setup mocks
@@ -188,9 +169,9 @@ class TestMeetingProcessor:
             "/output/transcript.txt",
         )
 
-        # Mock transcript processor (using improved processor by default)
-        mock_improved_processor_instance = mock_improved_processor.return_value
-        mock_improved_processor_instance.process_transcript.return_value = (
+        # Mock transcript processor
+        mock_processor_instance = mock_processor.return_value
+        mock_processor_instance.process_transcript.return_value = (
             "processed notes",
             "/output/notes.txt",
         )
@@ -221,7 +202,7 @@ class TestMeetingProcessor:
         mock_email_instance.download_meet_recording.assert_called_once()
         mock_audio_instance.extract_audio.assert_called_once()
         mock_transcriber_instance.get_transcript.assert_called_once()
-        mock_improved_processor_instance.process_transcript.assert_called_once()
+        mock_processor_instance.process_transcript.assert_called_once()
         mock_uploader_instance.upload_notes.assert_called_once()
 
         # Verify cleanup
@@ -268,7 +249,7 @@ class TestMainFunction:
             main()
 
         # Verify processor was created and called
-        mock_processor_class.assert_called_once_with(processor_type="improved")
+        mock_processor_class.assert_called_once_with()
         mock_processor.process_meeting.assert_called_once_with(
             email_subject_filter="Test Meeting",
             output_dir=None,
@@ -358,7 +339,6 @@ class TestIntegrationScenarios:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     @patch("dnd_notetaker.main.DocsUploader")
-    @patch("dnd_notetaker.main.ImprovedTranscriptProcessor")
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
@@ -369,7 +349,6 @@ class TestIntegrationScenarios:
         mock_audio,
         mock_transcriber,
         mock_processor,
-        mock_improved_processor,
         mock_uploader,
     ):
         """Test processing with custom output directory"""
@@ -386,7 +365,7 @@ class TestIntegrationScenarios:
             "text",
             os.path.join(self.temp_dir, "transcript.txt"),
         )
-        mock_improved_processor.return_value.process_transcript.return_value = (
+        mock_processor.return_value.process_transcript.return_value = (
             "notes",
             os.path.join(self.temp_dir, "notes.txt"),
         )
@@ -477,7 +456,6 @@ class TestIntegrationScenarios:
         assert found_transcript == transcript2
 
     @patch("dnd_notetaker.main.DocsUploader")
-    @patch("dnd_notetaker.main.ImprovedTranscriptProcessor")
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
@@ -488,7 +466,6 @@ class TestIntegrationScenarios:
         mock_audio,
         mock_transcriber,
         mock_processor,
-        mock_improved_processor,
         mock_uploader,
     ):
         """Test process flow when transcript already exists"""
@@ -511,7 +488,7 @@ class TestIntegrationScenarios:
             f.write("existing transcript content")
 
         # Configure mocks
-        mock_improved_processor.return_value.process_transcript.return_value = (
+        mock_processor.return_value.process_transcript.return_value = (
             "notes",
             os.path.join(test_dir, "notes.txt"),
         )
@@ -526,6 +503,6 @@ class TestIntegrationScenarios:
         mock_transcriber.return_value.get_transcript.assert_not_called()
 
         # Verify processor was called with existing transcript
-        mock_improved_processor.return_value.process_transcript.assert_called_once()
-        call_args = mock_improved_processor.return_value.process_transcript.call_args[0]
+        mock_processor.return_value.process_transcript.assert_called_once()
+        call_args = mock_processor.return_value.process_transcript.call_args[0]
         assert call_args[0] == transcript_path
