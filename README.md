@@ -1,199 +1,301 @@
-# DnD Session Processor
+# D&D Notetaker
 
-Automates the processing of DnD session recordings from Google Meet, generating structured narrative session notes and uploading them to Google Docs.
+Automated D&D session recording processor that transforms Google Meet recordings into structured narrative session notes.
 
 ## Features
 
-- Downloads session recordings from Gmail/Google Drive
-- Automatically creates organized session directories
-- Extracts audio from video recordings
-- Generates transcripts using OpenAI's Whisper API
-- Processes transcripts into structured narrative session notes:
+- **Automated Download**: Downloads session recordings from Gmail/Google Drive
+- **Smart Organization**: Automatically creates organized session directories
+- **Audio Processing**: Extracts and optimizes audio from video recordings
+- **AI Transcription**: Generates accurate transcripts using OpenAI's Whisper API
+- **Intelligent Processing**: Transforms raw transcripts into structured narrative notes:
   - Identifies and labels speakers (DM, players, characters)
   - Separates out-of-character discussions
   - Marks important game mechanics moments
-  - Highlights memorable quotes and moments
+  - Highlights memorable quotes and key events
   - Identifies session recap sections
-- Uploads notes to Google Docs
-- Comprehensive logging and progress tracking
+- **Improved Transcript Processing** (v2):
+  - Smart chunking for large transcripts
+  - Language detection and filtering
+  - Cost-effective two-stage processing
+  - Better speaker identification
+- **Google Docs Integration**: Automatically uploads notes to Google Docs
+- **Comprehensive Logging**: Detailed progress tracking and error reporting
 
-## Directory Structure
+## Quick Start
 
-The processor automatically creates an organized directory structure based on the meeting recording filename:
+### Using Make (Recommended)
 
-Input filename: `"DnD - 2025-01-10 18-41 CST - Recording.mp4"`
-Creates:
-```
-output/
-    dnd_sessions_2025_01_10/
-        DnD - 2025-01-10 18-41 CST - Recording.mp4
-        raw_transcript_20250110_184100.txt
-        processed_notes_20250110_184100.txt
-        summary_20250110_184100.json
-```
-
-## Installation
-
-1. Clone the repository and create a virtual environment:
 ```bash
+# Complete setup (virtual environment, dependencies, system checks)
+make setup
+
+# Process a session recording
+make process
+
+# Process with custom email subject filter
+make process-subject SUBJECT="DnD Thursday Session"
+
+# Run tests
+make test
+
+# See all available commands
+make help
+```
+
+### Manual Setup
+
+```bash
+# Clone repository
 git clone [repository-url]
-cd dnd-session-processor
+cd dnd_notetaker
+
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+
+# Install package in development mode
+pip install -e .
+
+# Set up credentials
+python scripts/setup_credentials.py
 ```
 
-2. Install required packages:
-```bash
-pip install -r requirements.txt
-```
+## Project Structure
 
-3. Install ffmpeg (WSL/Ubuntu):
-```bash
-sudo apt-get update
-sudo apt-get install ffmpeg
+```
+dnd_notetaker/
+├── src/dnd_notetaker/      # Main package
+│   ├── main.py             # Main entry point
+│   ├── audio_processor.py  # Audio extraction
+│   ├── transcriber.py      # Whisper transcription
+│   ├── transcript_processor.py  # GPT-4 processing
+│   ├── docs_uploader.py    # Google Docs upload
+│   ├── email_handler.py    # Email/Drive download
+│   └── utils.py            # Shared utilities
+├── scripts/                # Utility scripts
+│   ├── setup.sh           # Setup script
+│   ├── setup_credentials.py  # Credential setup
+│   └── demo_setup.sh      # Demo script
+├── tests/                  # Test suite
+├── Makefile               # Build automation
+└── requirements.txt       # Dependencies
 ```
 
 ## Configuration
 
-1. Set up credentials directory:
+### 1. Install System Dependencies
+
 ```bash
-mkdir .credentials
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Windows
+# Download from https://ffmpeg.org/download.html
 ```
 
-2. Set up Google Cloud Project:
-   - Create project in Google Cloud Console
-   - Enable Drive API and Docs API
-   - Create OAuth 2.0 credentials
-   - Download credentials and save as `.credentials/credentials.json`
+### 2. Set Up API Credentials
 
-3. Create `.credentials/config.json`:
-```json
-{
-    "email": {
-        "email": "your_email@gmail.com",
-        "password": "your_app_specific_password",
-        "imap_server": "imap.gmail.com"
-    },
-    "openai_api_key": "your_openai_api_key"
-}
+The application requires:
+- Google Service Account with Drive and Docs API access
+- OpenAI API key for transcription and processing
+
+Run the credential setup:
+```bash
+make setup-creds
+# Or manually:
+python scripts/setup_credentials.py
 ```
 
-The `.credentials` directory will contain:
-```
-.credentials/
-    config.json          # Your configuration
-    credentials.json     # Google OAuth credentials
-    token.json          # Generated OAuth token (created automatically)
-```
+This creates `.credentials/config.json` with your API keys.
+
+### 3. Google Service Account
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable Google Drive API and Google Docs API
+4. Create a Service Account with appropriate permissions
+5. Download the JSON key file
+6. Save as `.credentials/service_account.json`
 
 ## Usage
 
-### Complete Pipeline
+### Full Pipeline
 
-Process a DnD session recording:
+Process a recording from email to Google Docs:
 ```bash
-# Automatic directory creation based on session date
-python main.py process
+# Using Make
+make process
 
-# Override with custom directory
-python main.py process -o custom_directory
+# Using Python module
+python -m dnd_notetaker.main process
+
+# With custom output directory
+python -m dnd_notetaker.main process -o custom_directory
+
+# Filter by email subject
+python -m dnd_notetaker.main process --subject "DnD Thursday Session"
 
 # Keep temporary files for debugging
-python main.py process --keep-temp
-
-# Custom email subject filter
-python main.py process --subject "DnD Thursday Session"
-```
-
-### Manage Temporary Files
-```bash
-# List temp directories
-python main.py list
-
-# Clean up old temp files (>24 hours)
-python main.py clean
-
-# Clean up with custom age
-python main.py clean --age 48
+python -m dnd_notetaker.main process --keep-temp
 ```
 
 ### Individual Components
 
-Each component can be run independently:
-
-1. Download recording:
+Run specific parts of the pipeline:
 ```bash
-python email_handler.py -o output/dnd_sessions_2025_01_10
+# Download recording only
+make download
+
+# Extract audio from video
+make extract-audio VIDEO=path/to/video.mp4
+
+# Generate transcript
+make transcribe AUDIO=path/to/audio.mp3
+
+# Process transcript into notes
+make process-notes TRANSCRIPT=path/to/transcript.txt
+
+# Upload to Google Docs
+make upload-docs NOTES=path/to/notes.txt TITLE="Session Title"
 ```
 
-2. Extract audio:
+### Utility Commands
+
 ```bash
-python audio_processor.py -i "output/dnd_sessions_2025_01_10/DnD Session.mp4" -o output/dnd_sessions_2025_01_10
+# List temporary directories
+make list-sessions
+
+# Clean up old temporary files
+make clean-sessions
+
+# Run tests with coverage
+make test-coverage
+
+# Format code
+make format
+
+# Run linting
+make lint
 ```
 
-3. Generate transcript:
+### Transcript Processing Utilities
+
 ```bash
-python transcriber.py -i audio.mp3 -o output/dnd_sessions_2025_01_10
+# Preview transcript cleaning (no API calls)
+python scripts/preview_transcript_cleaning.py path/to/transcript.txt
+
+# Process transcript with cost preview
+python scripts/process_transcript_only.py \
+  --transcript path/to/transcript.txt \
+  --preview
+
+# Process transcript with cost limit
+python scripts/process_transcript_only.py \
+  --transcript path/to/transcript.txt \
+  --max-cost 1.00
 ```
 
-4. Process transcript and generate notes:
-```bash
-# Basic processing
-python transcript_processor.py -i raw_transcript.txt -o output/dnd_sessions_2025_01_10
+## Directory Organization
 
-# Analyze speakers and characters
-python transcript_processor.py -i transcript.txt --analyze-speakers
+The processor automatically creates organized directories based on recording filenames:
 
-# Extract game mechanics info
-python transcript_processor.py -i transcript.txt --extract-mechanics
+**Input**: `"DnD - 2025-01-10 18-41 CST - Recording.mp4"`
+
+**Creates**:
+```
+output/
+└── dnd_sessions_2025_01_10/
+    ├── DnD - 2025-01-10 18-41 CST - Recording.mp4
+    ├── session_audio.mp3
+    ├── full_transcript_*.txt
+    ├── processed_notes_*.txt
+    └── summary_*.json
 ```
 
-5. Upload to Google Docs:
+## Smart Checkpointing
+
+The processor includes intelligent checkpointing to avoid redundant work:
+
+1. **Session Already Processed**: If at least 2 key output files exist, the entire session is skipped
+2. **Audio Extraction**: Skipped if `session_audio.mp3` already exists
+3. **Transcript Generation**: Skipped if `full_transcript_*.txt` already exists (uses most recent)
+4. **Resumable Processing**: You can re-run the processor on partial sessions to complete remaining steps
+
+This is especially useful for:
+- Recovering from interruptions
+- Re-processing with different settings
+- Debugging specific pipeline stages
+
+## Development
+
+### Running Tests
+
 ```bash
-python docs_uploader.py -i notes.txt -t "DnD Session - January 10th, 2025"
+# All tests
+make test
+
+# With coverage
+make test-coverage
+
+# Specific test file
+python -m pytest tests/test_audio_processor.py -v
 ```
 
-## Example Processing Flow
+### Code Quality
 
-When you run:
 ```bash
-python main.py process
+# Format code with black and isort
+make format
+
+# Run linting
+make lint
+
+# Clean temporary files
+make clean
+
+# Clean everything (including venv)
+make clean-all
 ```
 
-The processor will:
-1. Download the latest session recording from Gmail
-2. Create a session directory under output/ based on the recording date
-3. Extract the audio track
-4. Generate a raw transcript
-5. Process the transcript into structured notes
-6. Upload the notes to Google Docs
-7. Provide a summary with all file locations and the Google Doc URL
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run tests (`make test`)
+5. Format code (`make format`)
+6. Commit changes (`git commit -m 'Add amazing feature'`)
+7. Push to branch (`git push origin feature/amazing-feature`)
+8. Open a Pull Request
 
 ## Troubleshooting
 
-1. Authentication Issues:
-   - Delete `.credentials/token.json` to force re-authentication
-   - Ensure APIs are enabled in Google Cloud Console
-   - Check `.credentials/credentials.json` is present and valid
-   - Verify permissions on `.credentials` directory
+### Common Issues
 
-2. File Processing:
-   - Verify ffmpeg installation for audio extraction
-   - Check disk space for temporary files
-   - Use --keep-temp for debugging
+1. **FFmpeg not found**: Install FFmpeg for your system (see Configuration)
+2. **API rate limits**: The processor includes automatic retries and chunking
+3. **Large files**: Audio is automatically chunked for Whisper API limits
+4. **Authentication errors**: Ensure service account has proper permissions
 
-3. Directory Structure:
-   - If filename parsing fails, defaults to output/session_default
-   - Check file permissions if directory creation fails
-   - Manually specify output directory with -o if needed
+### Debug Mode
 
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Make your changes
-4. Submit a pull request
+Enable detailed logging:
+```bash
+export LOG_LEVEL=DEBUG
+python -m dnd_notetaker.main process
+```
 
 ## License
 
-MIT License - See LICENSE file
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- OpenAI Whisper for transcription
+- GPT-4 for intelligent text processing
+- Google APIs for Drive and Docs integration
+- MoviePy for video processing
