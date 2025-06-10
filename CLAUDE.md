@@ -125,7 +125,7 @@ The application requires credentials stored in `.credentials/`:
 
 ### System Dependencies
 
-- Python 3.8+
+- Python 3.9+
 - FFmpeg (for audio/video processing)
 
 ## Authentication
