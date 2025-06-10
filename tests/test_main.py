@@ -397,9 +397,21 @@ class TestIntegrationScenarios:
         # Skipping for now as it's platform-dependent
         pass
 
-    def test_find_existing_files_with_transcript(self):
+    @patch("dnd_notetaker.main.DocsUploader")
+    @patch("dnd_notetaker.main.TranscriptProcessor")
+    @patch("dnd_notetaker.main.Transcriber")
+    @patch("dnd_notetaker.main.AudioProcessor")
+    @patch("dnd_notetaker.main.EmailHandler")
+    def test_find_existing_files_with_transcript(
+        self,
+        mock_email,
+        mock_audio,
+        mock_transcriber,
+        mock_processor,
+        mock_uploader,
+    ):
         """Test finding existing files including transcript"""
-        processor = MeetingProcessor()
+        processor = MeetingProcessor(self.config_path)
 
         # Create test directory with files
         test_dir = os.path.join(self.temp_dir, "test_session")
@@ -426,9 +438,21 @@ class TestIntegrationScenarios:
         assert found_audio == audio_path
         assert found_transcript == transcript_path
 
-    def test_find_existing_files_multiple_transcripts(self):
+    @patch("dnd_notetaker.main.DocsUploader")
+    @patch("dnd_notetaker.main.TranscriptProcessor")
+    @patch("dnd_notetaker.main.Transcriber")
+    @patch("dnd_notetaker.main.AudioProcessor")
+    @patch("dnd_notetaker.main.EmailHandler")
+    def test_find_existing_files_multiple_transcripts(
+        self,
+        mock_email,
+        mock_audio,
+        mock_transcriber,
+        mock_processor,
+        mock_uploader,
+    ):
         """Test finding most recent transcript when multiple exist"""
-        processor = MeetingProcessor()
+        processor = MeetingProcessor(self.config_path)
 
         # Create test directory with files
         test_dir = os.path.join(self.temp_dir, "test_session")
@@ -469,7 +493,7 @@ class TestIntegrationScenarios:
         mock_uploader,
     ):
         """Test process flow when transcript already exists"""
-        processor = MeetingProcessor()
+        processor = MeetingProcessor(self.config_path)
 
         # Create test directory with existing files
         test_dir = os.path.join(self.temp_dir, "existing_session")
