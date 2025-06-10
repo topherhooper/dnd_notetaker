@@ -20,7 +20,7 @@ VENV_PIP := $(VENV)/bin/pip
 .DEFAULT_GOAL := help
 
 # Phony targets
-.PHONY: help setup install dev-install test test-coverage lint format clean clean-all run process list-sessions clean-sessions demo check-deps
+.PHONY: help setup install dev-install test test-coverage lint format clean clean-all run process list-sessions clean-sessions check-deps
 
 # Help target - displays available commands
 help:
@@ -52,7 +52,6 @@ help:
 	@echo "  make test-coverage  - Run tests with coverage report"
 	@echo "  make lint           - Run code linting (pylint)"
 	@echo "  make format         - Format code with black"
-	@echo "  make demo           - Run demo setup"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean          - Clean temporary files and cache"
@@ -193,10 +192,6 @@ setup-creds: $(VENV)/bin/activate
 	@echo "Setting up credentials..."
 	$(VENV_PYTHON) $(SCRIPTS_DIR)/setup_credentials.py
 
-# Run demo setup
-demo: $(VENV)/bin/activate
-	@echo "Running demo setup..."
-	cd $(SCRIPTS_DIR) && bash demo_setup.sh
 
 # Development shortcuts
 dev: dev-install test lint

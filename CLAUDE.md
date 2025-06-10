@@ -21,7 +21,6 @@ dnd_notetaker/
 ├── scripts/                # Utility scripts
 │   ├── setup.sh           # Setup script
 │   ├── cleanup.sh         # Cleanup script
-│   ├── demo_setup.sh      # Demo setup
 │   ├── setup_credentials.py  # Interactive credential setup
 │   └── simple_download_test.py  # Download testing
 ├── tests/                  # Test suite
@@ -62,7 +61,6 @@ make clean
 make list-sessions
 make clean-sessions
 make setup-creds
-make demo
 ```
 
 ### Direct Python Commands

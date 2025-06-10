@@ -76,7 +76,6 @@ dnd_notetaker/
 ├── scripts/                # Utility scripts
 │   ├── setup.sh           # Setup script
 │   ├── setup_credentials.py  # Credential setup
-│   └── demo_setup.sh      # Demo script
 ├── tests/                  # Test suite
 ├── Makefile               # Build automation
 └── requirements.txt       # Dependencies
@@ -182,22 +181,6 @@ make format
 make lint
 ```
 
-### Transcript Processing Utilities
-
-```bash
-# Preview transcript cleaning (no API calls)
-python scripts/preview_transcript_cleaning.py path/to/transcript.txt
-
-# Process transcript with cost preview
-python scripts/process_transcript_only.py \
-  --transcript path/to/transcript.txt \
-  --preview
-
-# Process transcript with cost limit
-python scripts/process_transcript_only.py \
-  --transcript path/to/transcript.txt \
-  --max-cost 1.00
-```
 
 ## Directory Organization
 

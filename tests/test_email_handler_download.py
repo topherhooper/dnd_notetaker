@@ -124,8 +124,13 @@ class TestEmailHandlerDownload:
                     # Verify open was called with the correct path
                     mock_open.assert_called_once_with(expected_path, "wb")
 
-    def test_sanitize_filename(self):
+    @patch("dnd_notetaker.email_handler.GoogleAuthenticator")
+    def test_sanitize_filename(self, mock_auth):
         """Test filename sanitization"""
+        # Mock the authentication
+        mock_drive_service = Mock()
+        mock_auth.return_value.get_services.return_value = (mock_drive_service, Mock())
+        
         handler = EmailHandler(self.credentials)
 
         # Test various problematic filenames
