@@ -1,15 +1,15 @@
 import argparse
 import json
 import os
+import re
 import shutil
-import tempfile
 from datetime import datetime
 
 from tqdm import tqdm
 
 from .audio_processor import AudioProcessor
 from .docs_uploader import DocsUploader
-from .email_handler import EmailHandler
+from .drive_handler import DriveHandler
 from .transcriber import Transcriber
 from .transcript_processor import TranscriptProcessor
 from .utils import cleanup_old_temp_directories, list_temp_directories, setup_logging
@@ -32,7 +32,7 @@ class MeetingProcessor:
                 self.config = json.load(f)
 
             # Initialize components
-            self.email_handler = EmailHandler(self.config["email"])
+            self.drive_handler = DriveHandler()
             self.audio_processor = AudioProcessor()
             self.transcriber = Transcriber(self.config["openai_api_key"])
             self.transcript_processor = TranscriptProcessor(
@@ -73,13 +73,17 @@ class MeetingProcessor:
             parts = filename.split(" - ")
             if len(parts) >= 2:
                 # Extract meeting name (e.g., "DnD")
-                meeting_name = parts[0].strip().lower().replace(" ", "_")
+                meeting_name = parts[0].strip().lower()
+                # Replace spaces and special characters with underscores
+                meeting_name = re.sub(r'[^a-z0-9]+', '_', meeting_name)
+                # Remove leading/trailing underscores
+                meeting_name = meeting_name.strip('_')
 
                 # Extract date (e.g., "2025-01-10")
                 date_str = parts[1].strip().split()[0]  # Get just the date part
 
-                # Convert date format (replace hyphens with underscores)
-                formatted_date = date_str.replace("-", "_")
+                # Convert date format (replace hyphens, slashes, and dots with underscores)
+                formatted_date = date_str.replace("-", "_").replace("/", "_").replace(".", "_")
 
                 # Combine into directory name
                 dir_name = f"{meeting_name}_sessions_{formatted_date}"
@@ -167,7 +171,8 @@ class MeetingProcessor:
 
     def process_meeting(
         self,
-        email_subject_filter,
+        name_filter=None,
+        file_id=None,
         output_dir=None,
         keep_temp_files=False,
         existing_dir=None,
@@ -196,20 +201,44 @@ class MeetingProcessor:
                         f"Using existing directory as output: {output_dir}"
                     )
 
-            # Download from email if no video found
-            if not video_path:
-                self.logger.info("Downloading meeting recording...")
-                video_path = self.email_handler.download_meet_recording(
-                    email_subject_filter, "temp_download"  # Temporary location
-                )
+            # Determine output directory early if we need to download
+            if not video_path and output_dir is None:
+                # Create a temporary output directory name that we'll update later
+                output_dir = os.path.join("output", f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+                self.logger.info(f"Creating temporary output directory: {output_dir}")
 
-            # Get output directory name from video filename if not provided
-            if output_dir is None:
-                video_filename = os.path.basename(video_path)
-                output_dir = self.get_output_dir_from_filename(video_filename)
-                self.logger.info(
-                    f"Using output directory derived from filename: {output_dir}"
-                )
+            # Download from Drive if no video found
+            if not video_path:
+                self.logger.info("Downloading meeting recording from Google Drive...")
+                # Ensure output directory exists for download
+                os.makedirs(output_dir, exist_ok=True)
+                
+                if file_id:
+                    # Download by file ID
+                    video_path = self.drive_handler.download_file(file_id, output_dir)
+                elif name_filter:
+                    # Download by name filter
+                    video_path = self.drive_handler.download_recording(name_filter, output_dir)
+                else:
+                    raise ValueError("Either file_id or name_filter must be provided")
+
+            # Get proper output directory name from video filename and rename if needed
+            video_filename = os.path.basename(video_path)
+            proper_output_dir = self.get_output_dir_from_filename(video_filename)
+            
+            # If we created a temporary directory name, rename it to the proper name
+            if output_dir and "session_" in output_dir and output_dir != proper_output_dir:
+                if os.path.exists(output_dir) and not os.path.exists(proper_output_dir):
+                    self.logger.info(f"Renaming output directory: {output_dir} -> {proper_output_dir}")
+                    os.rename(output_dir, proper_output_dir)
+                    # Update video_path if it was in the old directory
+                    if output_dir in video_path:
+                        video_path = video_path.replace(output_dir, proper_output_dir)
+                output_dir = proper_output_dir
+            elif output_dir is None:
+                output_dir = proper_output_dir
+            
+            self.logger.info(f"Using output directory: {output_dir}")
 
             # Check if already processed
             if self.check_already_processed(output_dir):
@@ -224,26 +253,16 @@ class MeetingProcessor:
             # Verify/create output directory
             self.verify_output_directory(output_dir)
 
-            # Move video to final location (only if downloaded from email)
-            if not existing_dir:
-                final_video_path = os.path.join(
-                    output_dir, os.path.basename(video_path)
-                )
-                os.makedirs(os.path.dirname(final_video_path), exist_ok=True)
-                os.rename(video_path, final_video_path)
-                video_path = final_video_path
+            # Video should already be in the output directory if downloaded
+            # Just ensure the output directory exists
+            os.makedirs(output_dir, exist_ok=True)
 
             # Check for existing transcript in output directory if not already found
             if not transcript_path and output_dir:
                 _, _, transcript_path = self.find_existing_files(output_dir)
 
-            # Create temporary directory for processing
-            temp_dir = tempfile.mkdtemp(prefix="meeting_processor_")
-            self.logger.debug(f"Created temporary directory: {temp_dir}")
-
-            # Clean up temporary download directory (only if downloaded from email)
-            if not existing_dir and os.path.exists("temp_download"):
-                shutil.rmtree("temp_download")
+            # No need for temporary directory - we use output directory
+            # All processing happens in the output directory
 
             # Create progress bar for processing steps
             with tqdm(total=4, desc="Processing meeting") as pbar:
@@ -315,13 +334,10 @@ class MeetingProcessor:
             raise
 
         finally:
-            # Cleanup temporary files
-            if temp_dir and not keep_temp_files:
+            # Clean up any audio processor temp files
+            if not keep_temp_files:
                 try:
-                    self.logger.debug(f"Cleaning up temporary directory: {temp_dir}")
                     self.audio_processor.cleanup()  # Clean up any audio processor temp files
-                    if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir)
                 except Exception as e:
                     self.logger.warning(f"Error during cleanup: {str(e)}")
 
@@ -346,12 +362,28 @@ def main():
         "--keep-temp", action="store_true", help="Keep temporary files"
     )
     process_parser.add_argument(
-        "--subject", "-s", help="Email subject filter", default="Meeting records"
+        "--name", "-n", help="Recording name filter"
+    )
+    process_parser.add_argument(
+        "--id", "-i", help="Google Drive file ID"
     )
     process_parser.add_argument(
         "--dir",
         "-d",
         help="Path to existing output directory (skips steps based on existing files)",
+    )
+    
+    # Interactive command
+    interactive_parser = subparsers.add_parser(
+        "interactive", help="Interactively select and process a recording"
+    )
+    interactive_parser.add_argument(
+        "--output",
+        "-o",
+        help="Output directory (defaults to directory based on meeting name and date)",
+    )
+    interactive_parser.add_argument(
+        "--keep-temp", action="store_true", help="Keep temporary files"
     )
 
     # Clean command
@@ -379,8 +411,18 @@ def main():
 
             # Process meeting
             logger.info("Starting meeting processing pipeline...")
+            
+            # Validate that either name or id is provided for new downloads
+            if not args.dir and not args.name and not args.id:
+                print("Error: Either --name, --id, or --dir must be provided")
+                print("Use --name to search by recording name")
+                print("Use --id to download by Google Drive file ID")
+                print("Use --dir to process an existing directory")
+                return
+            
             results = processor.process_meeting(
-                email_subject_filter=args.subject,
+                name_filter=args.name,
+                file_id=args.id,
                 output_dir=args.output or args.dir,
                 keep_temp_files=args.keep_temp,
                 existing_dir=args.dir,
@@ -401,6 +443,79 @@ def main():
             else:
                 print(f"Output Directory: {args.output or 'auto-generated'}")
                 print(f"Video File: {os.path.basename(results['video_path'])}")
+                print(f"Transcript: {os.path.basename(results['transcript_path'])}")
+                print(f"Notes: {os.path.basename(results['notes_path'])}")
+                print(f"Google Doc: {results['doc_url']}")
+
+        elif args.command == "interactive":
+            # Initialize processor
+            processor = MeetingProcessor()
+            
+            # List available recordings
+            logger.info("Fetching available recordings from Google Drive...")
+            recordings = processor.drive_handler.list_recordings()
+            
+            if not recordings:
+                print("No recordings found in the Google Drive folder.")
+                return
+            
+            # Display recordings
+            print("\nAvailable Recordings:")
+            print("-" * 80)
+            for rec in recordings:
+                print(f"{rec['index']:2d}. {rec['file_name']}")
+                print(f"    Size: {rec['file_size_mb']:.1f} MB")
+                print(f"    Created: {rec['created_time'][:10]}")
+                print()
+            
+            # Get user selection
+            while True:
+                try:
+                    selection = input(f"Select a recording to process (1-{len(recordings)}), or 'q' to quit: ")
+                    if selection.lower() == 'q':
+                        print("Exiting...")
+                        return
+                    
+                    idx = int(selection) - 1
+                    if 0 <= idx < len(recordings):
+                        selected = recordings[idx]
+                        break
+                    else:
+                        print(f"Please enter a number between 1 and {len(recordings)}")
+                except ValueError:
+                    print("Please enter a valid number or 'q' to quit")
+            
+            # Download the selected recording
+            print(f"\nProcessing: {selected['file_name']}")
+            print(f"Downloading {selected['file_size_mb']:.1f} MB...")
+            
+            # Get output directory from filename
+            output_dir = args.output or processor.get_output_dir_from_filename(selected['file_name'])
+            
+            # Ensure output directory exists
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Download the file directly to output directory
+            video_path = processor.drive_handler.download_file(
+                selected['file_id'], output_dir
+            )
+            
+            # Process the recording
+            logger.info("Starting processing pipeline...")
+            results = processor.process_meeting(
+                file_id=selected['file_id'],
+                output_dir=output_dir,
+                keep_temp_files=args.keep_temp,
+                existing_dir=output_dir  # Use output_dir as existing_dir since we downloaded there
+            )
+            
+            # Print summary
+            print("\nProcessing Summary:")
+            if results.get("status") == "skipped":
+                print(f"Status: SKIPPED - {results.get('reason', 'unknown')}")
+                print(f"Output Directory: {results.get('output_dir', 'N/A')}")
+            else:
+                print(f"Output Directory: {output_dir}")
                 print(f"Transcript: {os.path.basename(results['transcript_path'])}")
                 print(f"Notes: {os.path.basename(results['notes_path'])}")
                 print(f"Google Doc: {results['doc_url']}")

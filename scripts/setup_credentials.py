@@ -55,48 +55,31 @@ class CredentialSetup:
                     sys.exit(0)
         return False
         
-    def setup_email_credentials(self, update_mode=False):
-        """Set up email/IMAP credentials"""
+    def setup_drive_folder(self, update_mode=False):
+        """Set up Google Drive folder ID (optional)"""
         print("\n" + "-"*40)
-        print("Email Configuration (for downloading recordings)")
+        print("Google Drive Folder Configuration (optional)")
         print("-"*40)
         
-        if update_mode and 'email' in self.config:
-            print("Current email configuration:")
-            self.display_config({'email': self.config['email']}, hide_passwords=True)
-            if input("Update email settings? (y/N): ").strip().lower() != 'y':
+        if update_mode and 'drive_folder_id' in self.config:
+            print(f"Current Drive folder ID: {self.config['drive_folder_id']}")
+            if input("Update Drive folder ID? (y/N): ").strip().lower() != 'y':
                 return
         
-        print("\nFor Gmail, you'll need an App Password:")
-        print("1. Go to https://myaccount.google.com/apppasswords")
-        print("2. Generate an app-specific password")
-        print("3. Use that password here (not your regular Gmail password)\n")
+        print("\nYou can specify a custom Google Drive folder ID.")
+        print("Leave blank to use the default folder.")
+        print("To find a folder ID:")
+        print("1. Open the folder in Google Drive")
+        print("2. Look at the URL: drive.google.com/drive/folders/[FOLDER_ID]")
+        print("3. Copy the FOLDER_ID part\n")
         
-        email_config = {}
+        default_id = self.config.get('drive_folder_id', '') if update_mode else ''
+        folder_id = input(f"Drive folder ID{f' [{default_id}]' if default_id else ' (optional)'}: ").strip()
         
-        # Email address
-        default_email = self.config.get('email', {}).get('email', '') if update_mode else ''
-        email = input(f"Email address{f' [{default_email}]' if default_email else ''}: ").strip()
-        if not email and default_email:
-            email = default_email
-        email_config['email'] = email
-        
-        # Password
-        print("App password (input hidden): ", end='', flush=True)
-        password = getpass.getpass('')
-        if not password and update_mode:
-            password = self.config.get('email', {}).get('password', '')
-            print("(keeping existing password)")
-        email_config['password'] = password
-        
-        # IMAP server
-        default_imap = self.config.get('email', {}).get('imap_server', 'imap.gmail.com') if update_mode else 'imap.gmail.com'
-        imap = input(f"IMAP server [{default_imap}]: ").strip()
-        if not imap:
-            imap = default_imap
-        email_config['imap_server'] = imap
-        
-        self.config['email'] = email_config
+        if folder_id:
+            self.config['drive_folder_id'] = folder_id
+        elif default_id:
+            self.config['drive_folder_id'] = default_id
         
     def setup_openai_credentials(self, update_mode=False):
         """Set up OpenAI API credentials"""
@@ -196,8 +179,6 @@ class CredentialSetup:
         display_config = json.loads(json.dumps(config))  # Deep copy
         
         if hide_passwords:
-            if 'email' in display_config and 'password' in display_config['email']:
-                display_config['email']['password'] = "***hidden***"
             if 'openai_api_key' in display_config:
                 # Show first 6 and last 4 characters
                 key = display_config['openai_api_key']
@@ -256,9 +237,6 @@ class CredentialSetup:
                     config = json.load(f)
                     
                 required_fields = [
-                    ('email.email', lambda c: c.get('email', {}).get('email')),
-                    ('email.password', lambda c: c.get('email', {}).get('password')),
-                    ('email.imap_server', lambda c: c.get('email', {}).get('imap_server')),
                     ('openai_api_key', lambda c: c.get('openai_api_key'))
                 ]
                 
@@ -284,8 +262,8 @@ class CredentialSetup:
         update_mode = self.check_existing_config()
         
         # Set up each credential type
-        self.setup_email_credentials(update_mode)
         self.setup_openai_credentials(update_mode)
+        self.setup_drive_folder(update_mode)
         
         # Save configuration
         self.save_config()

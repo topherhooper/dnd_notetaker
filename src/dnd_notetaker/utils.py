@@ -51,9 +51,10 @@ def save_text_output(content, prefix, output_dir):
 def cleanup_old_temp_directories(base_dir, max_age_hours=24):
     """
     Clean up temporary directories older than specified hours.
+    Now also cleans up audio_chunks_temp directories in output folders.
 
     Args:
-        base_dir (str): Base directory to search for temp directories
+        base_dir (str): Base directory to search (typically 'output')
         max_age_hours (int): Maximum age in hours before cleanup
 
     Returns:
@@ -64,7 +65,7 @@ def cleanup_old_temp_directories(base_dir, max_age_hours=24):
     remaining_dirs = []
 
     try:
-        # Look for temp directories
+        # First, clean up any legacy system temp directories
         for item in os.listdir(tempfile.gettempdir()):
             if item.startswith("meeting_processor_") or item.startswith(
                 "audio_processor_"
@@ -86,6 +87,28 @@ def cleanup_old_temp_directories(base_dir, max_age_hours=24):
                     else:
                         remaining_dirs.append(temp_path)
 
+        # Now clean up audio_chunks_temp directories in output folders
+        if os.path.exists(base_dir):
+            for session_dir in os.listdir(base_dir):
+                session_path = os.path.join(base_dir, session_dir)
+                if os.path.isdir(session_path):
+                    audio_chunks_path = os.path.join(session_path, "audio_chunks_temp")
+                    if os.path.exists(audio_chunks_path):
+                        # Check age
+                        created_time = os.path.getctime(audio_chunks_path)
+                        age_hours = (time.time() - created_time) / 3600
+
+                        if age_hours > max_age_hours:
+                            try:
+                                shutil.rmtree(audio_chunks_path)
+                                removed_count += 1
+                                logger.info(f"Removed old audio chunks directory: {audio_chunks_path}")
+                            except Exception as e:
+                                logger.warning(f"Failed to remove {audio_chunks_path}: {str(e)}")
+                                remaining_dirs.append(audio_chunks_path)
+                        else:
+                            remaining_dirs.append(audio_chunks_path)
+
         return removed_count, remaining_dirs
 
     except Exception as e:
@@ -96,9 +119,10 @@ def cleanup_old_temp_directories(base_dir, max_age_hours=24):
 def list_temp_directories(base_dir):
     """
     List all temporary directories with their information.
+    Now lists both legacy system temp dirs and audio_chunks_temp dirs in output.
 
     Args:
-        base_dir (str): Base directory to search (not used currently, searches system temp)
+        base_dir (str): Base directory to search (typically 'output')
 
     Returns:
         list: List of dictionaries with directory information
@@ -107,9 +131,7 @@ def list_temp_directories(base_dir):
     dir_info = []
 
     try:
-        import tempfile
-
-        # Look for temp directories
+        # First, look for legacy system temp directories
         for item in os.listdir(tempfile.gettempdir()):
             if item.startswith("meeting_processor_") or item.startswith(
                 "audio_processor_"
@@ -136,8 +158,40 @@ def list_temp_directories(base_dir):
                             ),
                             "age_hours": round(age_hours, 1),
                             "size_mb": round(total_size / (1024 * 1024), 2),
+                            "type": "legacy_temp"
                         }
                     )
+
+        # Now look for audio_chunks_temp directories in output folders
+        if os.path.exists(base_dir):
+            for session_dir in os.listdir(base_dir):
+                session_path = os.path.join(base_dir, session_dir)
+                if os.path.isdir(session_path):
+                    audio_chunks_path = os.path.join(session_path, "audio_chunks_temp")
+                    if os.path.exists(audio_chunks_path):
+                        # Get directory info
+                        created_time = os.path.getctime(audio_chunks_path)
+                        age_hours = (time.time() - created_time) / 3600
+
+                        # Calculate size
+                        total_size = 0
+                        for dirpath, dirnames, filenames in os.walk(audio_chunks_path):
+                            for filename in filenames:
+                                filepath = os.path.join(dirpath, filename)
+                                if os.path.exists(filepath):
+                                    total_size += os.path.getsize(filepath)
+
+                        dir_info.append(
+                            {
+                                "path": audio_chunks_path,
+                                "created": datetime.fromtimestamp(created_time).strftime(
+                                    "%Y-%m-%d %H:%M:%S"
+                                ),
+                                "age_hours": round(age_hours, 1),
+                                "size_mb": round(total_size / (1024 * 1024), 2),
+                                "type": "audio_chunks"
+                            }
+                        )
 
         return sorted(dir_info, key=lambda x: x["age_hours"], reverse=True)
 

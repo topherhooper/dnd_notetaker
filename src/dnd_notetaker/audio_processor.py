@@ -28,9 +28,15 @@ class AudioProcessor:
                     f"Failed to clean up directory {temp_dir}: {str(e)}"
                 )
 
-    def create_temp_dir(self):
+    def create_temp_dir(self, base_dir=None):
         """Create a temporary directory and track it for cleanup"""
-        temp_dir = tempfile.mkdtemp(prefix="audio_processor_")
+        if base_dir:
+            # Create a subdirectory in the provided base directory
+            temp_dir = os.path.join(base_dir, "audio_chunks_temp")
+            os.makedirs(temp_dir, exist_ok=True)
+        else:
+            # Fallback to system temp if no base directory provided
+            temp_dir = tempfile.mkdtemp(prefix="audio_processor_")
         self.temp_dirs.append(temp_dir)
         return temp_dir
 
@@ -152,8 +158,8 @@ class AudioProcessor:
                     f"Could not determine file size, will attempt to split: {str(e)}"
                 )
 
-            # Create temporary directory for chunks
-            temp_dir = self.create_temp_dir()
+            # Create temporary directory for chunks in the output directory
+            temp_dir = self.create_temp_dir(output_dir)
 
             # Get duration using ffprobe (doesn't load file into memory)
             duration_seconds = self.get_audio_duration(audio_path)

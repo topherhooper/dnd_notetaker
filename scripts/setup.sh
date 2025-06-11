@@ -43,11 +43,6 @@ if [ ! -f .credentials/config.json ]; then
     mkdir -p .credentials
     cat > .credentials/config.json << EOF
 {
-    "email": {
-        "email": "your_email@gmail.com",
-        "password": "your_password",
-        "imap_server": "imap.gmail.com"
-    },
     "openai_api_key": "your_openai_api_key"
 }
 EOF

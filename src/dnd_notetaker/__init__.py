@@ -2,7 +2,7 @@
 D&D Notetaker - Automated D&D session recording processor
 
 This package provides tools for processing D&D session recordings:
-- Download recordings from email/Google Drive
+- Download recordings from Google Drive
 - Extract audio from video files
 - Transcribe audio using OpenAI Whisper
 - Process transcripts into structured notes using GPT-4
@@ -13,7 +13,7 @@ __version__ = "1.0.0"
 
 from .audio_processor import AudioProcessor
 from .docs_uploader import DocsUploader
-from .email_handler import EmailHandler
+from .drive_handler import DriveHandler
 
 # Import main components for easier access
 from .main import MeetingProcessor
@@ -27,7 +27,7 @@ __all__ = [
     "Transcriber",
     "TranscriptProcessor",
     "DocsUploader",
-    "EmailHandler",
+    "DriveHandler",
     "setup_logging",
     "cleanup_old_temp_directories",
     "list_temp_directories",

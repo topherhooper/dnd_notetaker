@@ -15,7 +15,7 @@ dnd_notetaker/
 │   ├── transcriber.py      # OpenAI Whisper transcription
 │   ├── transcript_processor.py  # GPT-4 text processing
 │   ├── docs_uploader.py    # Google Docs upload
-│   ├── email_handler.py    # Email/Google Drive download
+│   ├── drive_handler.py    # Google Drive download
 │   ├── auth_service_account.py  # Google authentication
 │   └── utils.py            # Shared utilities
 ├── scripts/                # Utility scripts
@@ -40,7 +40,9 @@ make setup
 
 # Run the full pipeline
 make process
-make process-subject SUBJECT="DnD Thursday Session"
+make interactive  # Interactive mode - select from list
+make process-name NAME="DnD Thursday Session"
+make process-id ID="your-file-id-here"
 make process-dir DIR=/path/to/existing/dir
 
 # Individual components
@@ -68,9 +70,11 @@ make setup-creds
 ```bash
 # Full pipeline
 python -m dnd_notetaker.main process
+python -m dnd_notetaker.main interactive  # Interactive mode
 python -m dnd_notetaker.main process -o custom_directory
 python -m dnd_notetaker.main process --keep-temp
-python -m dnd_notetaker.main process --subject "DnD Thursday Session"
+python -m dnd_notetaker.main process --name "DnD Thursday Session"
+python -m dnd_notetaker.main process --id "your-file-id-here"
 
 # Utility commands
 python -m dnd_notetaker.main list     # List temporary directories
@@ -78,7 +82,7 @@ python -m dnd_notetaker.main clean    # Clean up old temp files
 python -m dnd_notetaker.main clean --age 48  # Clean files older than 48 hours
 
 # Individual components (for testing/debugging)
-python -m dnd_notetaker.email_handler -o output/session_dir
+python -m dnd_notetaker.drive_handler -o output/session_dir
 python -m dnd_notetaker.audio_processor -i "video.mp4" -o output/session_dir
 python -m dnd_notetaker.transcriber -i audio.mp3 -o output/session_dir
 python -m dnd_notetaker.transcript_processor -i transcript.txt -o output/session_dir
@@ -89,7 +93,7 @@ python -m dnd_notetaker.docs_uploader -i notes.txt -t "Session Title"
 
 This is a pipeline-based D&D session recording processor:
 
-1. **Email Download** (`email_handler.py`) → Downloads recordings from Gmail/Google Drive
+1. **Drive Download** (`drive_handler.py`) → Downloads recordings directly from Google Drive
 2. **Audio Extraction** (`audio_processor.py`) → Extracts and chunks audio from video files
 3. **Transcription** (`transcriber.py`) → Converts audio to text using OpenAI Whisper
 4. **Processing** (`transcript_processor.py`) → Structures transcript into narrative notes using GPT-4
@@ -100,6 +104,7 @@ This is a pipeline-based D&D session recording processor:
 Key architectural principles:
 - Each component can run independently for testing/debugging
 - Comprehensive error handling and logging throughout
+- All processing happens directly in the output directory (no system temp files)
 - Automatic directory organization based on session metadata
 - Smart checkpointing system that skips completed steps:
   - Skips entire session if already processed
@@ -114,7 +119,7 @@ Key architectural principles:
 ### API Credentials
 
 The application requires credentials stored in `.credentials/`:
-- `config.json` - Email credentials and OpenAI API key
+- `config.json` - OpenAI API key and optional Drive folder ID
 - `service_account.json` - Google Service Account credentials
 
 ### Required APIs
@@ -177,9 +182,6 @@ Service accounts work without interactive login, making them ideal for automatio
 # Quick process with defaults
 make process
 
-# Process with specific email subject
-make process-subject SUBJECT="Thursday DnD"
-
 # Process existing directory (useful for re-running)
 make process-dir DIR=output/dnd_sessions_2025_01_10
 ```
@@ -219,10 +221,10 @@ make clean-all
 - AudioProcessor automatically chunks large files
 - Chunks are transcribed separately and merged
 
-### Email Authentication
-- Gmail may require app-specific passwords
-- Consider using service account for automation
-- IMAP must be enabled in Gmail settings
+### Google Drive Access
+- Service account must have access to the Drive folder
+- Share the folder with the service account email
+- Folder ID can be configured in config.json
 
 ### Processing Interruptions
 - The processor checks for existing files

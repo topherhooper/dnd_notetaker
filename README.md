@@ -4,7 +4,7 @@ Automated D&D session recording processor that transforms Google Meet recordings
 
 ## Features
 
-- **Automated Download**: Downloads session recordings from Gmail/Google Drive
+- **Automated Download**: Downloads session recordings directly from Google Drive
 - **Smart Organization**: Automatically creates organized session directories
 - **Audio Processing**: Extracts and optimizes audio from video recordings
 - **AI Transcription**: Generates accurate transcripts using OpenAI's Whisper API
@@ -33,8 +33,14 @@ make setup
 # Process a session recording
 make process
 
-# Process with custom email subject filter
-make process-subject SUBJECT="DnD Thursday Session"
+# Process with recording name filter
+make process-name NAME="DnD Thursday Session"
+
+# Process with Google Drive file ID
+make process-id ID="your-file-id-here"
+
+# Interactive mode - select from list
+make interactive
 
 # Run tests
 make test
@@ -71,7 +77,7 @@ dnd_notetaker/
 │   ├── transcriber.py      # Whisper transcription
 │   ├── transcript_processor.py  # GPT-4 processing
 │   ├── docs_uploader.py    # Google Docs upload
-│   ├── email_handler.py    # Email/Drive download
+│   ├── drive_handler.py    # Google Drive download
 │   └── utils.py            # Shared utilities
 ├── scripts/                # Utility scripts
 │   ├── setup.sh           # Setup script
@@ -124,19 +130,28 @@ This creates `.credentials/config.json` with your API keys.
 
 ### Full Pipeline
 
-Process a recording from email to Google Docs:
+Process a recording from Google Drive to Google Docs:
 ```bash
 # Using Make
 make process
 
+# Interactive mode - select from available recordings
+make interactive
+
 # Using Python module
 python -m dnd_notetaker.main process
+
+# Interactive mode with Python
+python -m dnd_notetaker.main interactive
 
 # With custom output directory
 python -m dnd_notetaker.main process -o custom_directory
 
-# Filter by email subject
-python -m dnd_notetaker.main process --subject "DnD Thursday Session"
+# Filter by recording name
+python -m dnd_notetaker.main process --name "DnD Thursday Session"
+
+# Process by Google Drive file ID
+python -m dnd_notetaker.main process --id "your-file-id-here"
 
 # Keep temporary files for debugging
 python -m dnd_notetaker.main process --keep-temp

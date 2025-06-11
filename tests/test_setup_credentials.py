@@ -56,7 +56,7 @@ class TestCredentialSetup:
     def test_check_existing_config_no_overwrite(self, mock_input):
         # Create existing config
         self.setup.credentials_dir.mkdir()
-        existing_config = {"email": {"email": "test@example.com"}}
+        existing_config = {"openai_api_key": "test_key"}
         with open(self.setup.config_path, "w") as f:
             json.dump(existing_config, f)
 
@@ -68,7 +68,7 @@ class TestCredentialSetup:
     def test_check_existing_config_overwrite(self, mock_input):
         # Create existing config
         self.setup.credentials_dir.mkdir()
-        existing_config = {"email": {"email": "test@example.com"}}
+        existing_config = {"openai_api_key": "test_key"}
         with open(self.setup.config_path, "w") as f:
             json.dump(existing_config, f)
 
@@ -79,7 +79,7 @@ class TestCredentialSetup:
     def test_check_existing_config_update_mode(self, mock_input):
         # Create existing config
         self.setup.credentials_dir.mkdir()
-        existing_config = {"email": {"email": "test@example.com"}}
+        existing_config = {"openai_api_key": "test_key"}
         with open(self.setup.config_path, "w") as f:
             json.dump(existing_config, f)
 
@@ -87,32 +87,23 @@ class TestCredentialSetup:
         assert result is True
         assert self.setup.config == existing_config
 
-    @patch("getpass.getpass", return_value="test_password")
-    @patch("builtins.input", side_effect=["test@example.com", "imap.gmail.com"])
-    def test_setup_email_credentials(self, mock_input, mock_getpass):
-        self.setup.setup_email_credentials()
+    @patch("builtins.input", side_effect=["folder123"])
+    def test_setup_drive_folder(self, mock_input):
+        self.setup.setup_drive_folder()
 
-        assert self.setup.config["email"]["email"] == "test@example.com"
-        assert self.setup.config["email"]["password"] == "test_password"
-        assert self.setup.config["email"]["imap_server"] == "imap.gmail.com"
+        assert self.setup.config["drive_folder_id"] == "folder123"
 
-    @patch("getpass.getpass", return_value="")
-    @patch("builtins.input", side_effect=["", ""])
-    def test_setup_email_credentials_defaults(self, mock_input, mock_getpass):
+    @patch("builtins.input", side_effect=[""])
+    def test_setup_drive_folder_defaults(self, mock_input):
         # Set existing config
         self.setup.config = {
-            "email": {
-                "email": "existing@example.com",
-                "password": "existing_pass",
-                "imap_server": "imap.gmail.com",
-            }
+            "drive_folder_id": "existing_folder_id"
         }
 
-        self.setup.setup_email_credentials(update_mode=True)
+        self.setup.setup_drive_folder(update_mode=True)
 
-        # Should keep existing values
-        assert self.setup.config["email"]["email"] == "existing@example.com"
-        assert self.setup.config["email"]["imap_server"] == "imap.gmail.com"
+        # Should keep existing value
+        assert self.setup.config["drive_folder_id"] == "existing_folder_id"
 
     @patch("getpass.getpass", return_value="test_api_key")
     def test_setup_openai_credentials(self, mock_getpass):
@@ -122,11 +113,6 @@ class TestCredentialSetup:
 
     def test_display_config_hides_passwords(self):
         config = {
-            "email": {
-                "email": "test@example.com",
-                "password": "secret_password",
-                "imap_server": "imap.gmail.com",
-            },
             "openai_api_key": "sk-1234567890abcdefghijklmnop",
         }
 
@@ -137,13 +123,11 @@ class TestCredentialSetup:
         printed_json = mock_print.call_args[0][0]
         printed_config = json.loads(printed_json)
 
-        assert printed_config["email"]["password"] == "***hidden***"
         assert printed_config["openai_api_key"] == "sk-123...mnop"
 
     def test_save_config(self):
         self.setup.credentials_dir.mkdir()
         self.setup.config = {
-            "email": {"email": "test@example.com"},
             "openai_api_key": "test_key",
         }
 
@@ -165,11 +149,6 @@ class TestCredentialSetup:
         self.setup.credentials_dir.mkdir()
 
         config = {
-            "email": {
-                "email": "test@example.com",
-                "password": "test_pass",
-                "imap_server": "imap.gmail.com",
-            },
             "openai_api_key": "test_key",
         }
 
@@ -203,10 +182,6 @@ class TestCredentialSetup:
 
         # Config missing required fields
         config = {
-            "email": {
-                "email": "test@example.com"
-                # Missing password and imap_server
-            }
             # Missing openai_api_key
         }
 
@@ -222,7 +197,7 @@ class TestCredentialSetup:
     @patch("setup_credentials.CredentialSetup.setup_google_auth")
     @patch("setup_credentials.CredentialSetup.save_config")
     @patch("setup_credentials.CredentialSetup.setup_openai_credentials")
-    @patch("setup_credentials.CredentialSetup.setup_email_credentials")
+    @patch("setup_credentials.CredentialSetup.setup_drive_folder")
     @patch(
         "setup_credentials.CredentialSetup.check_existing_config", return_value=False
     )
@@ -233,7 +208,7 @@ class TestCredentialSetup:
         mock_header,
         mock_ensure_dir,
         mock_check,
-        mock_email,
+        mock_drive,
         mock_openai,
         mock_save,
         mock_google_auth,
@@ -246,7 +221,7 @@ class TestCredentialSetup:
         mock_header.assert_called_once()
         mock_ensure_dir.assert_called_once()
         mock_check.assert_called_once()
-        mock_email.assert_called_once_with(False)
+        mock_drive.assert_called_once_with(False)
         mock_openai.assert_called_once_with(False)
         mock_save.assert_called_once()
         mock_google_auth.assert_called_once()

@@ -16,7 +16,7 @@ def patch_all_processors(func):
         patch("dnd_notetaker.main.TranscriptProcessor")(
             patch("dnd_notetaker.main.Transcriber")(
                 patch("dnd_notetaker.main.AudioProcessor")(
-                    patch("dnd_notetaker.main.EmailHandler")(func)
+                    patch("dnd_notetaker.main.DriveHandler")(func)
                 )
             )
         )
@@ -28,11 +28,6 @@ class TestMeetingProcessor:
         self.temp_dir = tempfile.mkdtemp()
         self.config_path = os.path.join(self.temp_dir, "test_config.json")
         self.config = {
-            "email": {
-                "email": "test@example.com",
-                "password": "test_password",
-                "imap_server": "imap.gmail.com",
-            },
             "openai_api_key": "test_api_key",
         }
 
@@ -47,10 +42,10 @@ class TestMeetingProcessor:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_init_success(
         self,
-        mock_email,
+        mock_drive,
         mock_audio,
         mock_transcriber,
         mock_processor,
@@ -59,7 +54,7 @@ class TestMeetingProcessor:
         processor = MeetingProcessor(self.config_path)
 
         assert processor.config == self.config
-        mock_email.assert_called_once_with(self.config["email"])
+        mock_drive.assert_called_once()
         mock_audio.assert_called_once()
         mock_transcriber.assert_called_once_with(self.config["openai_api_key"])
         mock_processor.assert_called_once_with(self.config["openai_api_key"])
@@ -73,10 +68,10 @@ class TestMeetingProcessor:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_init_invalid_config(
         self,
-        mock_email,
+        mock_drive,
         mock_audio,
         mock_transcriber,
         mock_processor,
@@ -93,7 +88,7 @@ class TestMeetingProcessor:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_verify_output_directory(
         self, mock_email, mock_audio, mock_transcriber, mock_processor, mock_uploader
     ):
@@ -109,9 +104,9 @@ class TestMeetingProcessor:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_get_output_dir_from_filename(
-        self, mock_email, mock_audio, mock_transcriber, mock_processor, mock_uploader
+        self, mock_drive_handler, mock_audio, mock_transcriber, mock_processor, mock_uploader
     ):
         processor = MeetingProcessor(self.config_path)
 
@@ -134,7 +129,7 @@ class TestMeetingProcessor:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     @patch("dnd_notetaker.main.tqdm")
     @patch("os.rename")
     @patch("shutil.rmtree")
@@ -143,7 +138,7 @@ class TestMeetingProcessor:
         mock_rmtree,
         mock_rename,
         mock_tqdm,
-        mock_email,
+        mock_drive,
         mock_audio,
         mock_transcriber,
         mock_processor,
@@ -152,9 +147,9 @@ class TestMeetingProcessor:
         # Setup mocks
         processor = MeetingProcessor(self.config_path)
 
-        # Mock email handler
-        mock_email_instance = mock_email.return_value
-        mock_email_instance.download_meet_recording.return_value = (
+        # Mock drive handler
+        mock_drive_instance = mock_drive.return_value
+        mock_drive_instance.download_recording.return_value = (
             "/tmp/temp_download/DnD - 2025-01-10 18-41 CST - Recording.mp4"
         )
 
@@ -188,7 +183,7 @@ class TestMeetingProcessor:
 
         # Run process_meeting
         result = processor.process_meeting(
-            "DnD Meeting", output_dir=None, keep_temp_files=False
+            name_filter="DnD Meeting", output_dir=None, keep_temp_files=False
         )
 
         # Verify results
@@ -199,7 +194,7 @@ class TestMeetingProcessor:
         assert "timestamp" in result
 
         # Verify method calls
-        mock_email_instance.download_meet_recording.assert_called_once()
+        mock_drive_instance.download_recording.assert_called_once()
         mock_audio_instance.extract_audio.assert_called_once()
         mock_transcriber_instance.get_transcript.assert_called_once()
         mock_processor_instance.process_transcript.assert_called_once()
@@ -212,25 +207,25 @@ class TestMeetingProcessor:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_process_meeting_download_error(
-        self, mock_email, mock_audio, mock_transcriber, mock_processor, mock_uploader
+        self, mock_drive, mock_audio, mock_transcriber, mock_processor, mock_uploader
     ):
         processor = MeetingProcessor(self.config_path)
 
-        # Mock email handler to raise error
-        mock_email_instance = mock_email.return_value
-        mock_email_instance.download_meet_recording.side_effect = Exception(
+        # Mock drive handler to raise error
+        mock_drive_instance = mock_drive.return_value
+        mock_drive_instance.download_recording.side_effect = Exception(
             "Download failed"
         )
 
         # Run process_meeting and expect error
         with pytest.raises(Exception, match="Download failed"):
-            processor.process_meeting("DnD Meeting")
+            processor.process_meeting(name_filter="DnD Meeting")
 
 
 class TestMainFunction:
-    @patch("sys.argv", ["main.py", "process", "--subject", "Test Meeting"])
+    @patch("sys.argv", ["main.py", "process", "--name", "Test Meeting"])
     @patch("dnd_notetaker.main.MeetingProcessor")
     def test_main_process_command(self, mock_processor_class):
         # Mock processor instance
@@ -251,7 +246,8 @@ class TestMainFunction:
         # Verify processor was created and called
         mock_processor_class.assert_called_once_with()
         mock_processor.process_meeting.assert_called_once_with(
-            email_subject_filter="Test Meeting",
+            name_filter="Test Meeting",
+            file_id=None,
             output_dir=None,
             keep_temp_files=False,
             existing_dir=None,
@@ -324,11 +320,6 @@ class TestIntegrationScenarios:
 
         # Create test config
         self.config = {
-            "email": {
-                "email": "test@example.com",
-                "password": "test_password",
-                "imap_server": "imap.gmail.com",
-            },
             "openai_api_key": "test_api_key",
         }
 
@@ -342,10 +333,10 @@ class TestIntegrationScenarios:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_custom_output_directory(
         self,
-        mock_email,
+        mock_drive,
         mock_audio,
         mock_transcriber,
         mock_processor,
@@ -355,7 +346,7 @@ class TestIntegrationScenarios:
         processor = MeetingProcessor(self.config_path)
 
         # Setup minimal mocks
-        mock_email.return_value.download_meet_recording.return_value = os.path.join(
+        mock_drive.return_value.download_recording.return_value = os.path.join(
             self.temp_dir, "video.mp4"
         )
         mock_audio.return_value.extract_audio.return_value = os.path.join(
@@ -385,7 +376,7 @@ class TestIntegrationScenarios:
 
         # Process with custom directory
         result = processor.process_meeting(
-            "Test", output_dir=custom_output, keep_temp_files=True
+            name_filter="Test", output_dir=custom_output, keep_temp_files=True
         )
 
         # Verify custom directory was created
@@ -401,10 +392,10 @@ class TestIntegrationScenarios:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_find_existing_files_with_transcript(
         self,
-        mock_email,
+        mock_drive,
         mock_audio,
         mock_transcriber,
         mock_processor,
@@ -442,10 +433,10 @@ class TestIntegrationScenarios:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_find_existing_files_multiple_transcripts(
         self,
-        mock_email,
+        mock_drive,
         mock_audio,
         mock_transcriber,
         mock_processor,
@@ -483,10 +474,10 @@ class TestIntegrationScenarios:
     @patch("dnd_notetaker.main.TranscriptProcessor")
     @patch("dnd_notetaker.main.Transcriber")
     @patch("dnd_notetaker.main.AudioProcessor")
-    @patch("dnd_notetaker.main.EmailHandler")
+    @patch("dnd_notetaker.main.DriveHandler")
     def test_process_with_existing_transcript(
         self,
-        mock_email,
+        mock_drive,
         mock_audio,
         mock_transcriber,
         mock_processor,
@@ -521,7 +512,7 @@ class TestIntegrationScenarios:
         )
 
         # Process with existing directory
-        result = processor.process_meeting("Test", existing_dir=test_dir)
+        result = processor.process_meeting(name_filter="Test", existing_dir=test_dir)
 
         # Verify transcript generation was NOT called
         mock_transcriber.return_value.get_transcript.assert_not_called()
