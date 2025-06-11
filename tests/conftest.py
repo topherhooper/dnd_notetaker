@@ -20,9 +20,7 @@ def sample_config():
     """Sample configuration dictionary"""
     return {
         "openai_api_key": "test_openai_key",
-        "email": "test@example.com",
-        "email_password": "test_password",
-        "google_credentials_path": ".credentials/credentials.json",
+        "drive_folder_id": "test_folder_id",
     }
 
 

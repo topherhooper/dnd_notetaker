@@ -1,6 +1,6 @@
 .vscode/
 .credentials/
-output/
+output
 config.json
 *.mp4
 *.mp3

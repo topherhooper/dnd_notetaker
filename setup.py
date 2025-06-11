@@ -10,13 +10,13 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="dnd-notetaker",
-    version="1.0.0",
-    author="Your Name",
-    author_email="your.email@example.com",
+    version="2.0.0",
+    author="Topher Hooper",
+    author_email="hooper.christopher@gmail.com",
     description="Automated D&D session recording processor",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/dnd_notetaker",
+    url="https://github.com/topherhooper/dnd_notetaker",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     classifiers=[

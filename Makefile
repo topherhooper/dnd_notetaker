@@ -35,8 +35,10 @@ help:
 	@echo "Running the Application:"
 	@echo "  make run            - Run full pipeline (alias for 'make process')"
 	@echo "  make process        - Process a session recording"
+	@echo "  make interactive    - Interactive mode - select recording from list"
 	@echo "  make process-dir DIR=/path/to/dir - Process existing directory"
-	@echo "  make process-subject SUBJECT='Meeting Name' - Process by email subject"
+	@echo "  make process-name NAME='Recording Name' - Process by recording name
+	@echo "  make process-id ID='file_id' - Process by Google Drive file ID""
 	@echo "  make list-sessions  - List temporary directories"
 	@echo "  make clean-sessions - Clean old temporary files"
 	@echo ""
@@ -141,15 +143,25 @@ process: $(VENV)/bin/activate
 	@echo "Processing D&D session recording..."
 	$(VENV_PYTHON) -m dnd_notetaker.main process $(ARGS)
 
+# Interactive mode - select recording from list
+interactive: $(VENV)/bin/activate
+	@echo "Starting interactive mode..."
+	$(VENV_PYTHON) -m dnd_notetaker.main interactive $(ARGS)
+
 # Process with specific output directory
 process-dir: $(VENV)/bin/activate
 	@echo "Processing with directory: $(DIR)"
 	$(VENV_PYTHON) -m dnd_notetaker.main process --dir "$(DIR)"
 
-# Process by email subject
-process-subject: $(VENV)/bin/activate
-	@echo "Processing by email subject: $(SUBJECT)"
-	$(VENV_PYTHON) -m dnd_notetaker.main process --subject "$(SUBJECT)"
+# Process by recording name
+process-name: $(VENV)/bin/activate
+	@echo "Processing by recording name: $(NAME)"
+	$(VENV_PYTHON) -m dnd_notetaker.main process --name "$(NAME)"
+
+# Process by Google Drive file ID
+process-id: $(VENV)/bin/activate
+	@echo "Processing by file ID: $(ID)"
+	$(VENV_PYTHON) -m dnd_notetaker.main process --id "$(ID)"
 
 # List temporary directories
 list-sessions: $(VENV)/bin/activate
@@ -163,8 +175,8 @@ clean-sessions: $(VENV)/bin/activate
 
 # Individual component targets
 download: $(VENV)/bin/activate
-	@echo "Downloading recording from email..."
-	$(VENV_PYTHON) -m dnd_notetaker.email_handler -o $(OUTPUT_DIR)
+	@echo "Downloading recording from Google Drive..."
+	$(VENV_PYTHON) -m dnd_notetaker.drive_handler -o $(OUTPUT_DIR)
 
 extract-audio: $(VENV)/bin/activate
 	@echo "Extracting audio from video..."
