@@ -412,13 +412,33 @@ def main():
             # Process meeting
             logger.info("Starting meeting processing pipeline...")
             
-            # Validate that either name or id is provided for new downloads
+            # If no arguments provided, get the latest recording from Drive
             if not args.dir and not args.name and not args.id:
-                print("Error: Either --name, --id, or --dir must be provided")
-                print("Use --name to search by recording name")
-                print("Use --id to download by Google Drive file ID")
-                print("Use --dir to process an existing directory")
-                return
+                logger.info("No arguments provided, fetching latest recording from Drive...")
+                recordings = processor.drive_handler.list_recordings()
+                
+                if not recordings:
+                    print("Error: No recordings found in the Google Drive folder")
+                    return
+                
+                # Get the latest recording (first in the list since it's sorted by createdTime desc)
+                latest = recordings[0]
+                logger.info(f"Found latest recording: {latest['file_name']}")
+                
+                # Show confirmation prompt
+                print("\nLatest recording found:")
+                print(f"  Name: {latest['file_name']}")
+                print(f"  Size: {latest['file_size_mb']:.1f} MB")
+                print(f"  Created: {latest['created_time'][:19] if latest['created_time'] else 'Unknown'}")
+                print()
+                
+                response = input("Do you want to process this recording? (y/N): ")
+                if response.lower() != 'y':
+                    print("Operation cancelled.")
+                    return
+                
+                # Use the file ID of the latest recording
+                args.id = latest['file_id']
             
             results = processor.process_meeting(
                 name_filter=args.name,

@@ -253,6 +253,128 @@ class TestMainFunction:
             existing_dir=None,
         )
 
+    @patch("sys.argv", ["main.py", "process", "--id", "1w5mooSUXERqvATHjSGite3VNmwDQa6hW"])
+    @patch("dnd_notetaker.main.MeetingProcessor")
+    def test_main_process_command_with_id(self, mock_processor_class):
+        # Mock processor instance
+        mock_processor = MagicMock()
+        mock_processor_class.return_value = mock_processor
+        mock_processor.process_meeting.return_value = {
+            "video_path": "/output/video.mp4",
+            "transcript_path": "/output/transcript.txt",
+            "notes_path": "/output/notes.txt",
+            "doc_url": "https://docs.google.com/document/d/123",
+            "timestamp": "20250110",
+        }
+
+        # Run main
+        with patch("builtins.print"):
+            main()
+
+        # Verify processor was created and called
+        mock_processor_class.assert_called_once_with()
+        mock_processor.process_meeting.assert_called_once_with(
+            name_filter=None,
+            file_id="1w5mooSUXERqvATHjSGite3VNmwDQa6hW",
+            output_dir=None,
+            keep_temp_files=False,
+            existing_dir=None,
+        )
+
+    @patch("sys.argv", ["main.py", "process"])
+    @patch("builtins.input", return_value='y')
+    @patch("builtins.print")
+    @patch("dnd_notetaker.main.MeetingProcessor")
+    def test_main_process_command_no_args(self, mock_processor_class, mock_print, mock_input):
+        # Mock processor instance
+        mock_processor = MagicMock()
+        mock_processor_class.return_value = mock_processor
+        
+        # Mock list_recordings to return a test recording
+        mock_processor.drive_handler.list_recordings.return_value = [{
+            "index": 1,
+            "file_name": "DnD - 2025-01-10 18-41 CST - Recording.mp4",
+            "file_size_mb": 500.5,
+            "file_id": "test_file_id_123",
+            "created_time": "2025-01-10T18:41:00Z",
+        }]
+        
+        # Mock process_meeting
+        mock_processor.process_meeting.return_value = {
+            "video_path": "/output/video.mp4",
+            "transcript_path": "/output/transcript.txt",
+            "notes_path": "/output/notes.txt",
+            "doc_url": "https://docs.google.com/document/d/123",
+            "timestamp": "20250110",
+        }
+        
+        # Run main
+        main()
+
+        # Verify list_recordings was called
+        mock_processor.drive_handler.list_recordings.assert_called_once()
+        
+        # Verify confirmation prompt was shown
+        mock_print.assert_any_call("\nLatest recording found:")
+        mock_print.assert_any_call("  Name: DnD - 2025-01-10 18-41 CST - Recording.mp4")
+        mock_print.assert_any_call("  Size: 500.5 MB")
+        
+        # Verify process_meeting was called with the file ID
+        mock_processor.process_meeting.assert_called_once_with(
+            name_filter=None,
+            file_id="test_file_id_123",
+            output_dir=None,
+            keep_temp_files=False,
+            existing_dir=None,
+        )
+
+    @patch("sys.argv", ["main.py", "process"])
+    @patch("builtins.print")
+    @patch("dnd_notetaker.main.MeetingProcessor")
+    def test_main_process_command_no_recordings(self, mock_processor_class, mock_print):
+        # Mock processor instance
+        mock_processor = MagicMock()
+        mock_processor_class.return_value = mock_processor
+        
+        # Mock list_recordings to return empty list
+        mock_processor.drive_handler.list_recordings.return_value = []
+        
+        # Run main
+        main()
+
+        # Verify error message was printed
+        mock_print.assert_any_call("Error: No recordings found in the Google Drive folder")
+        
+        # Verify process_meeting was NOT called
+        mock_processor.process_meeting.assert_not_called()
+
+    @patch("sys.argv", ["main.py", "process"])
+    @patch("builtins.input", return_value='n')
+    @patch("builtins.print")
+    @patch("dnd_notetaker.main.MeetingProcessor")
+    def test_main_process_command_confirmation_cancelled(self, mock_processor_class, mock_print, mock_input):
+        # Mock processor instance
+        mock_processor = MagicMock()
+        mock_processor_class.return_value = mock_processor
+        
+        # Mock list_recordings to return a test recording
+        mock_processor.drive_handler.list_recordings.return_value = [{
+            "index": 1,
+            "file_name": "DnD - 2025-01-10 18-41 CST - Recording.mp4",
+            "file_size_mb": 500.5,
+            "file_id": "test_file_id_123",
+            "created_time": "2025-01-10T18:41:00Z",
+        }]
+        
+        # Run main
+        main()
+
+        # Verify cancellation message was printed
+        mock_print.assert_any_call("Operation cancelled.")
+        
+        # Verify process_meeting was NOT called
+        mock_processor.process_meeting.assert_not_called()
+
     @patch("sys.argv", ["main.py", "clean", "--age", "48"])
     @patch("dnd_notetaker.main.cleanup_old_temp_directories")
     def test_main_clean_command(self, mock_cleanup):
