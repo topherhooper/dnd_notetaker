@@ -58,7 +58,7 @@ class Config:
                 "OpenAI API key not configured.\n\n"
                 "To fix this:\n"
                 "1. Get your API key from: https://platform.openai.com/api-keys\n"
-                "2. Edit ~/.meet_notes/config.json\n"
+                "2. Edit .credentials/config.json\n"
                 "3. Set \"openai_api_key\": \"sk-your-key-here\"\n\n"
                 "See README.md for detailed instructions."
             )
@@ -74,8 +74,8 @@ class Config:
                 "To fix this:\n"
                 "1. Create a Google Cloud service account\n"
                 "2. Download the JSON key file\n" 
-                "3. Save it to: ~/.meet_notes/service_account.json\n"
-                "4. Or update the path in: ~/.meet_notes/config.json\n\n"
+                "3. Save it to: .credentials/service_account.json\n"
+                "4. Or update the path in: .credentials/config.json\n\n"
                 "See README.md for detailed instructions."
             )
         return path

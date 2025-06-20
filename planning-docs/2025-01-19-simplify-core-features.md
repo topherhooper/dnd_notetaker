@@ -72,7 +72,7 @@ Instead of just Google Docs, create a simple sharing mechanism:
 
 ### 5. Configuration Simplification
 
-Single config file at `~/.meet_notes/config.json`:
+Single config file at `.credentials/config.json`:
 ```json
 {
   "openai_api_key": "sk-...",

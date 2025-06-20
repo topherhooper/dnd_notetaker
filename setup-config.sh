@@ -9,11 +9,11 @@ echo "================================="
 echo ""
 
 # Ensure config directory exists
-mkdir -p ~/.meet_notes
+mkdir -p .credentials
 
 # Check if config already exists
-if [ -f ~/.meet_notes/config.json ]; then
-    echo "✅ Config file already exists at: ~/.meet_notes/config.json"
+if [ -f .credentials/config.json ]; then
+    echo "✅ Config file already exists at: .credentials/config.json"
     echo ""
     read -p "Do you want to update it? (y/N): " -n 1 -r
     echo ""
@@ -32,10 +32,10 @@ read -p "Enter your OpenAI API key (sk-...): " openai_key
 # Get service account path
 echo ""
 echo "📝 Google Service Account Setup"
-echo "Default path: ~/.meet_notes/service_account.json"
+echo "Default path: .credentials/service_account.json"
 read -p "Enter path to service account JSON (or press Enter for default): " service_account
 if [ -z "$service_account" ]; then
-    service_account="~/.meet_notes/service_account.json"
+    service_account=".credentials/service_account.json"
 fi
 
 # Expand tilde in path
@@ -49,7 +49,7 @@ if [ ! -f "$service_account" ]; then
 fi
 
 # Create config
-cat > ~/.meet_notes/config.json << EOF
+cat > .credentials/config.json << EOF
 {
   "openai_api_key": "${openai_key}",
   "google_service_account": "${service_account}",
@@ -58,7 +58,7 @@ cat > ~/.meet_notes/config.json << EOF
 EOF
 
 echo ""
-echo "✅ Configuration saved to: ~/.meet_notes/config.json"
+echo "✅ Configuration saved to: .credentials/config.json"
 echo ""
 echo "Next steps:"
 echo "1. Download your Google service account key if you haven't already"

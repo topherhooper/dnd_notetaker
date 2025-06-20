@@ -13,24 +13,6 @@ Streamlined Google Meet recording processor that automatically generates natural
 - 🐳 **Docker Support** - Zero-setup containerized execution
 
 ## Quick Start (Docker - Recommended)
-
-### Option 1: Automated Setup (Easiest)
-
-```bash
-git clone https://github.com/[username]/dnd_notetaker.git
-cd dnd_notetaker
-./quickstart.sh
-```
-
-This will:
-- Set up directories
-- Build the Docker image
-- Create a config template
-
-Then run `./setup-config.sh` to configure your API keys and run `make run`.
-
-### Option 2: Manual Setup
-
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/[username]/dnd_notetaker.git
@@ -43,8 +25,8 @@ Then run `./setup-config.sh` to configure your API keys and run `make run`.
    ```
 
 3. **Configure** (see [Configuration](#configuration) for details):
-   - Copy `config.example.json` to `~/.meet_notes/config.json` and update values
-   - Add your Google service account key to `~/.meet_notes/service_account.json`
+   - Copy `config.example.json` to `.credentials/config.json` and update values
+   - Add your Google service account key to `.credentials/service_account.json`
 
 4. **Run**:
    ```bash
@@ -88,7 +70,7 @@ brew install ffmpeg
    - Go to "IAM & Admin" > "Service Accounts"
    - Click "Create Service Account"
    - Download the JSON key file
-5. Save the key file to `~/.meet_notes/service_account.json`
+5. Save the key file to `.credentials/service_account.json`
 6. Share your Google Drive folder with the service account email
 
 ### 2. OpenAI API Key
@@ -206,7 +188,7 @@ If you see errors about missing config or service account:
 
 2. **Check your config**:
    ```bash
-   cat ~/.meet_notes/config.json
+   cat .credentials/config.json
    ```
    Make sure:
    - `openai_api_key` is set (starts with `sk-`)
@@ -214,7 +196,7 @@ If you see errors about missing config or service account:
 
 3. **Verify service account exists**:
    ```bash
-   ls -la ~/.meet_notes/service_account.json
+   ls -la .credentials/service_account.json
    ```
    If missing, download from Google Cloud Console
 

@@ -41,7 +41,7 @@ Google Drive → Download → Audio Extraction → Transcription → Text Proces
 **Purpose**: Simple configuration management
 
 **Key Features**:
-- Auto-creates `~/.meet_notes/config.json`
+- Auto-creates `.credentials/config.json`
 - Manages OpenAI API key, service account path, output directory
 - No complex environment variable handling
 
@@ -189,7 +189,7 @@ meet_notes_output/
 1. **Single command** - No complex CLI options
 2. **Prose notes** - Natural narrative, no bullets/structure
 3. **HTML viewer** - All artifacts in one shareable page
-4. **Simple config** - One JSON file in ~/.meet_notes/
+4. **Simple config** - One JSON file in .credentials/
 5. **Progress bar** - Clear visual feedback
 6. **Smart checkpoints** - Skip expensive operations automatically
 
@@ -306,7 +306,6 @@ When setup instructions change (e.g., new dependencies, package structure), the 
    
 2. **Documentation Files**:
    - `README.md`: User installation instructions
-   - `quickstart.sh`: Quick setup script
    - `Dockerfile`: Container setup instructions
    
 3. **Package Configuration**:
