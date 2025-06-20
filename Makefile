@@ -1,225 +1,132 @@
-# Makefile for D&D Notetaker
-# A comprehensive build system for the D&D session recording processor
+.PHONY: help build run run-file setup dev test clean lint docker-setup
 
-# Variables
-PYTHON := python3
-PIP := pip
-VENV := venv
-SRC_DIR := src/dnd_notetaker
-TEST_DIR := tests
-SCRIPTS_DIR := scripts
-
-# Default output directory
-OUTPUT_DIR := output
-
-# Python executable in virtual environment
-VENV_PYTHON := $(VENV)/bin/python
-VENV_PIP := $(VENV)/bin/pip
-
-# Default target
+# Default goal
 .DEFAULT_GOAL := help
 
-# Phony targets
-.PHONY: help setup install dev-install test test-coverage lint format clean clean-all run process list-sessions clean-sessions check-deps
+# Variables
+IMAGE_NAME = meet-notes
+CONTAINER_NAME = meet-notes-processor
+CONFIG_DIR = /workspaces/dnd_notetaker/.credentials
+OUTPUT_DIR = /workspaces/dnd_notetaker/meet_notes_output
 
-# Help target - displays available commands
-help:
-	@echo "D&D Notetaker - Available Commands:"
-	@echo "=================================="
-	@echo "Setup & Installation:"
-	@echo "  make setup          - Complete setup (venv, deps, ffmpeg check)"
-	@echo "  make install        - Install production dependencies"
-	@echo "  make dev-install    - Install all dependencies (including test)"
-	@echo "  make check-deps     - Check system dependencies (ffmpeg)"
+# Colors for output
+GREEN = \033[0;32m
+YELLOW = \033[0;33m
+NC = \033[0m # No Color
+
+help: ## Show this help message
+	@echo "Meet Notes - Google Meet Recording Processor"
 	@echo ""
-	@echo "Running the Application:"
-	@echo "  make run            - Run full pipeline (alias for 'make process')"
-	@echo "  make process        - Process latest recording (with confirmation)"
-	@echo "  make interactive    - Interactive mode - select recording from list"
-	@echo "  make process-dir DIR=/path/to/dir - Process existing directory"
-	@echo "  make process-name NAME='Recording Name' - Process by recording name"
-	@echo "  make process-id ID='file_id' - Process by Google Drive file ID"
+	@echo "Usage:"
+	@echo "  make $(YELLOW)<target>$(NC)"
 	@echo ""
-	@echo "  Note: Use 'make process-id ID=...' not 'make process --id ...'"
-	@echo "  make list-sessions  - List temporary directories"
-	@echo "  make clean-sessions - Clean old temporary files"
+	@echo "Docker Commands:"
+	@echo "  $(GREEN)build$(NC)       Build Docker image"
+	@echo "  $(GREEN)run$(NC)         Process most recent recording (Docker)"
+	@echo "  $(GREEN)run-file$(NC)    Process specific recording (Docker)"
+	@echo "              Example: make run-file FILE_ID=1a2b3c4d5e6f"
 	@echo ""
-	@echo "Individual Components:"
-	@echo "  make download       - Download recording only"
-	@echo "  make extract-audio  - Extract audio from video"
-	@echo "  make transcribe     - Generate transcript from audio"
-	@echo "  make process-notes  - Process transcript into notes"
-	@echo "  make upload-docs    - Upload notes to Google Docs"
+	@echo "Local Development:"
+	@echo "  $(GREEN)setup$(NC)       Setup local development environment"
+	@echo "  $(GREEN)dev$(NC)         Run locally (no Docker)"
+	@echo "  $(GREEN)test$(NC)        Run test suite"
+	@echo "  $(GREEN)lint$(NC)        Run linting"
+	@echo "  $(GREEN)clean$(NC)       Clean build artifacts"
 	@echo ""
-	@echo "Development:"
-	@echo "  make test           - Run all tests"
-	@echo "  make test-coverage  - Run tests with coverage report"
-	@echo "  make lint           - Run code linting (pylint)"
-	@echo "  make format         - Format code with black"
+	@echo "Setup:"
+	@echo "  $(GREEN)docker-setup$(NC) One-time setup for Docker usage"
+
+build: ## Build Docker image
+	@echo "$(GREEN)Building Docker image...$(NC)"
+	docker build -t $(IMAGE_NAME) .
+	@echo "$(GREEN)✓ Docker image built successfully$(NC)"
+
+run: build ## Process most recent recording using Docker
+	@echo "$(GREEN)Processing most recent recording...$(NC)"
+	@mkdir -p $(OUTPUT_DIR)
+	docker run --rm \
+		-v $(CONFIG_DIR):/.meat_notes_configs \
+		-v $(OUTPUT_DIR):/meet_notes_output \
+		$(IMAGE_NAME)
+
+run-file: build ## Process specific recording using Docker (FILE_ID=xxx)
+	@if [ -z "$(FILE_ID)" ]; then \
+		echo "$(YELLOW)Error: Please specify FILE_ID$(NC)"; \
+		echo "Usage: make run-file FILE_ID=your_file_id"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Processing recording: $(FILE_ID)$(NC)"
+	@mkdir -p $(OUTPUT_DIR)
+	docker run --rm \
+		-v $(CONFIG_DIR):/.meat_notes_configs \
+		-v $(OUTPUT_DIR):/meet_notes_output \
+		$(IMAGE_NAME) $(FILE_ID)
+
+setup: ## Setup local development environment
+	@echo "$(GREEN)Setting up development environment...$(NC)"
+	python3 -m venv venv
+	./venv/bin/pip install --upgrade pip
+	./venv/bin/pip install -e .
+	./venv/bin/pip install -r requirements.txt
 	@echo ""
-	@echo "Maintenance:"
-	@echo "  make clean          - Clean temporary files and cache"
-	@echo "  make clean-all      - Clean everything (including venv)"
-	@echo ""
-	@echo "Configuration:"
-	@echo "  make setup-creds    - Interactive credential setup"
+	@echo "$(GREEN)✓ Development environment ready!$(NC)"
+	@echo "$(YELLOW)Activate with: source venv/bin/activate$(NC)"
 
-# Setup virtual environment and install dependencies
-setup: $(VENV)/bin/activate install check-deps
-	@echo "✓ Setup complete!"
-	@echo "Activate virtual environment with: source $(VENV)/bin/activate"
+dev: ## Run locally without Docker
+	@if [ ! -d "venv" ]; then \
+		echo "$(YELLOW)Virtual environment not found. Running setup first...$(NC)"; \
+		make setup; \
+	fi
+	./venv/bin/python -m dnd_notetaker $(ARGS)
 
-# Create virtual environment
-$(VENV)/bin/activate:
-	@echo "Creating virtual environment..."
-	$(PYTHON) -m venv $(VENV)
-	$(VENV_PIP) install --upgrade pip
+test: ## Run test suite
+	@echo "$(GREEN)Running type checks...$(NC)"
+	@if [ -d "venv" ]; then \
+		./venv/bin/python -m pyright; \
+	else \
+		python -m pyright; \
+	fi
+	@echo "$(GREEN)Running tests...$(NC)"
+	@if [ -d "venv" ]; then \
+		./venv/bin/python -m pytest; \
+	else \
+		python -m pytest; \
+	fi
+	@echo "$(GREEN)Testing dry-run mode...$(NC)"
+	@if [ -d "venv" ]; then \
+		./venv/bin/python -m dnd_notetaker --dry-run && echo "$(GREEN)✓ Dry-run test passed$(NC)" || echo "$(YELLOW)✗ Dry-run test failed$(NC)"; \
+	else \
+		python -m dnd_notetaker --dry-run && echo "$(GREEN)✓ Dry-run test passed$(NC)" || echo "$(YELLOW)✗ Dry-run test failed$(NC)"; \
+	fi
 
-# Install production dependencies
-install: $(VENV)/bin/activate
-	@echo "Installing production dependencies..."
-	$(VENV_PIP) install -r requirements.txt
+lint: ## Run linting
+	@if [ -d "venv" ]; then \
+		./venv/bin/python -m pylint src/dnd_notetaker; \
+	else \
+		echo "$(YELLOW)Install pylint: pip install pylint$(NC)"; \
+	fi
 
-# Install all dependencies (including dev/test)
-dev-install: $(VENV)/bin/activate
-	@echo "Installing all dependencies..."
-	$(VENV_PIP) install -r requirements.txt
-
-# Check system dependencies
-check-deps:
-	@echo "Checking system dependencies..."
-	@command -v ffmpeg >/dev/null 2>&1 && echo "✓ ffmpeg is installed" || \
-		(echo "✗ ffmpeg is not installed. Please install it:"; \
-		 echo "  Ubuntu/Debian: sudo apt-get install ffmpeg"; \
-		 echo "  macOS: brew install ffmpeg"; \
-		 echo "  Windows: Download from https://ffmpeg.org/download.html"; \
-		 exit 1)
-
-# Run tests
-test: $(VENV)/bin/activate
-	@echo "Running tests..."
-	$(VENV_PYTHON) -m pytest $(TEST_DIR) -v
-
-# Run tests with coverage
-test-coverage: $(VENV)/bin/activate
-	@echo "Running tests with coverage..."
-	$(VENV_PYTHON) -m pytest $(TEST_DIR) --cov=$(SRC_DIR) --cov-report=html --cov-report=term
-
-# Lint code
-lint: $(VENV)/bin/activate
-	@echo "Running linting..."
-	$(VENV_PIP) install -q pylint
-	$(VENV_PYTHON) -m pylint $(SRC_DIR)
-
-# Format code
-format: $(VENV)/bin/activate
-	@echo "Formatting code..."
-	$(VENV_PIP) install -q black isort
-	$(VENV_PYTHON) -m isort $(SRC_DIR) $(TEST_DIR)
-	$(VENV_PYTHON) -m black $(SRC_DIR) $(TEST_DIR)
-
-# Clean temporary files and cache
-clean:
-	@echo "Cleaning temporary files..."
-	find . -type d -name "__pycache__" -exec rm -rf {} +
+clean: ## Clean build artifacts
+	@echo "$(GREEN)Cleaning build artifacts...$(NC)"
+	rm -rf build/ dist/ *.egg-info
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type d -name "*.egg-info" -exec rm -rf {} +
-	find . -type d -name ".pytest_cache" -exec rm -rf {} +
-	find . -type d -name ".coverage" -delete
-	find . -type d -name "htmlcov" -exec rm -rf {} +
-	rm -rf temp_download/
-	@echo "✓ Cleaned temporary files"
+	@echo "$(GREEN)✓ Clean complete$(NC)"
 
-# Clean everything including virtual environment
-clean-all: clean
-	@echo "Removing virtual environment..."
-	rm -rf $(VENV)
-	@echo "✓ Cleaned everything"
-
-# Run the main application (full pipeline)
-run: process
-
-# Process a session recording (full pipeline)
-process: $(VENV)/bin/activate
-	@echo "Processing D&D session recording..."
-	$(VENV_PYTHON) -m dnd_notetaker.main process $(ARGS)
-
-# Interactive mode - select recording from list
-interactive: $(VENV)/bin/activate
-	@echo "Starting interactive mode..."
-	$(VENV_PYTHON) -m dnd_notetaker.main interactive $(ARGS)
-
-# Process with specific output directory
-process-dir: $(VENV)/bin/activate
-	@echo "Processing with directory: $(DIR)"
-	$(VENV_PYTHON) -m dnd_notetaker.main process --dir "$(DIR)"
-
-# Process by recording name
-process-name: $(VENV)/bin/activate
-	@echo "Processing by recording name: $(NAME)"
-	$(VENV_PYTHON) -m dnd_notetaker.main process --name "$(NAME)"
-
-# Process by Google Drive file ID
-process-id: $(VENV)/bin/activate
-	@echo "Processing by file ID: $(ID)"
-	$(VENV_PYTHON) -m dnd_notetaker.main process --id "$(ID)"
-
-# List temporary directories
-list-sessions: $(VENV)/bin/activate
-	@echo "Listing temporary directories..."
-	$(VENV_PYTHON) -m dnd_notetaker.main list
-
-# Clean old temporary files
-clean-sessions: $(VENV)/bin/activate
-	@echo "Cleaning old temporary files..."
-	$(VENV_PYTHON) -m dnd_notetaker.main clean
-
-# Individual component targets
-download: $(VENV)/bin/activate
-	@echo "Downloading recording from Google Drive..."
-	$(VENV_PYTHON) -m dnd_notetaker.drive_handler -o $(OUTPUT_DIR)
-
-extract-audio: $(VENV)/bin/activate
-	@echo "Extracting audio from video..."
-	@test -n "$(VIDEO)" || (echo "Error: VIDEO variable not set. Use: make extract-audio VIDEO=path/to/video.mp4"; exit 1)
-	$(VENV_PYTHON) -m dnd_notetaker.audio_processor -i "$(VIDEO)" -o $(OUTPUT_DIR)
-
-transcribe: $(VENV)/bin/activate
-	@echo "Generating transcript..."
-	@test -n "$(AUDIO)" || (echo "Error: AUDIO variable not set. Use: make transcribe AUDIO=path/to/audio.mp3"; exit 1)
-	$(VENV_PYTHON) -m dnd_notetaker.transcriber -i "$(AUDIO)" -o $(OUTPUT_DIR)
-
-process-notes: $(VENV)/bin/activate
-	@echo "Processing transcript into notes..."
-	@test -n "$(TRANSCRIPT)" || (echo "Error: TRANSCRIPT variable not set. Use: make process-notes TRANSCRIPT=path/to/transcript.txt"; exit 1)
-	$(VENV_PYTHON) -m dnd_notetaker.transcript_processor -i "$(TRANSCRIPT)" -o $(OUTPUT_DIR)
-
-upload-docs: $(VENV)/bin/activate
-	@echo "Uploading to Google Docs..."
-	@test -n "$(NOTES)" || (echo "Error: NOTES variable not set. Use: make upload-docs NOTES=path/to/notes.txt"; exit 1)
-	@test -n "$(TITLE)" || (echo "Error: TITLE variable not set. Use: make upload-docs NOTES=path/to/notes.txt TITLE='Session Title'"; exit 1)
-	$(VENV_PYTHON) -m dnd_notetaker.docs_uploader -i "$(NOTES)" -t "$(TITLE)"
-
-# Setup credentials interactively
-setup-creds: $(VENV)/bin/activate
-	@echo "Setting up credentials..."
-	$(VENV_PYTHON) $(SCRIPTS_DIR)/setup_credentials.py
-
-
-# Development shortcuts
-dev: dev-install test lint
-
-# Quick test for CI/CD
-ci: setup test-coverage lint
-
-# Print current configuration
-config-info:
-	@echo "D&D Notetaker Configuration:"
-	@echo "==========================="
-	@echo "Python: $(PYTHON)"
-	@echo "Virtual Environment: $(VENV)"
-	@echo "Source Directory: $(SRC_DIR)"
-	@echo "Test Directory: $(TEST_DIR)"
-	@echo "Scripts Directory: $(SCRIPTS_DIR)"
-	@echo "Output Directory: $(OUTPUT_DIR)"
+docker-setup: ## One-time setup for Docker usage
+	@echo "$(GREEN)Setting up Meet Notes for Docker...$(NC)"
+	@echo ""
+	@echo "1. Creating config directory..."
+	@mkdir -p $(CONFIG_DIR)
+	@echo ""
+	@echo "2. Creating output directory..."
+	@mkdir -p $(OUTPUT_DIR)
+	@echo ""
+	@echo "$(GREEN)✓ Setup complete!$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Next steps:$(NC)"
+	@echo "1. Add your config to: $(CONFIG_DIR)/config.json"
+	@echo "2. Add your service account key to: $(CONFIG_DIR)/service_account.json"
+	@echo "3. Run: make run"
+	@echo ""
+	@echo "See README.md for detailed configuration instructions."

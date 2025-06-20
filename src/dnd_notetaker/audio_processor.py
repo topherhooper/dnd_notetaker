@@ -19,14 +19,9 @@ class AudioProcessor:
     def cleanup(self):
         """Clean up any temporary directories created"""
         for temp_dir in self.temp_dirs:
-            try:
-                if os.path.exists(temp_dir):
-                    self.logger.debug(f"Cleaning up temporary directory: {temp_dir}")
-                    shutil.rmtree(temp_dir)
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to clean up directory {temp_dir}: {str(e)}"
-                )
+            if os.path.exists(temp_dir):
+                self.logger.debug(f"Cleaning up temporary directory: {temp_dir}")
+                shutil.rmtree(temp_dir)
 
     def create_temp_dir(self, base_dir=None):
         """Create a temporary directory and track it for cleanup"""
@@ -55,54 +50,46 @@ class AudioProcessor:
         """Extract audio from video file"""
         self.logger.info(f"Extracting audio from video: {video_path}")
 
-        try:
-            # Verify input file
-            if not os.path.exists(video_path):
-                raise FileNotFoundError(f"Video file not found: {video_path}")
+        # Verify input file
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
 
-            # Create output directory
-            os.makedirs(output_dir, exist_ok=True)
+        # Create output directory
+        os.makedirs(output_dir, exist_ok=True)
 
-            # Extract audio with progress bar
-            video = VideoFileClip(video_path)
-            duration = video.duration
+        # Extract audio with progress bar
+        video = VideoFileClip(video_path)
+        duration = video.duration
 
-            with tqdm(total=100, desc="Extracting audio") as pbar:
+        with tqdm(total=100, desc="Extracting audio") as pbar:
 
-                def progress_callback(t):
-                    pbar.update(int(t * 100) - pbar.n)
+            def progress_callback(t):
+                pbar.update(int(t * 100) - pbar.n)
 
-                audio_path = os.path.join(output_dir, "session_audio.mp3")
-                video.audio.write_audiofile(
-                    audio_path, logger=None
-                )  # Disable moviepy's logging
+            audio_path = os.path.join(output_dir, "session_audio.mp3")
+            video.audio.write_audiofile(
+                audio_path, logger=None
+            )  # Disable moviepy's logging
 
-            video.close()
-            self.logger.info(f"Successfully extracted audio to: {audio_path}")
-            return audio_path
-
-        except Exception as e:
-            self.logger.error(f"Error extracting audio: {str(e)}")
-            raise
+        video.close()
+        self.logger.info(f"Successfully extracted audio to: {audio_path}")
+        return audio_path
 
     def get_audio_duration(self, audio_path):
         """Get audio duration in seconds using ffprobe"""
-        try:
-            cmd = [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                audio_path,
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                return float(result.stdout.strip())
-        except Exception as e:
-            self.logger.warning(f"Could not get duration with ffprobe: {str(e)}")
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            audio_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            return float(result.stdout.strip())
         return None
 
     def split_audio_with_ffmpeg(
@@ -194,32 +181,25 @@ class AudioProcessor:
             # Split using ffmpeg (memory efficient)
             with tqdm(total=num_chunks, desc="Splitting audio") as pbar:
                 for i in range(num_chunks):
-                    try:
-                        start_time = i * chunk_duration_seconds
-                        # Make sure we don't exceed the actual duration
-                        chunk_duration = min(
-                            chunk_duration_seconds, duration_seconds - start_time
-                        )
+                    start_time = i * chunk_duration_seconds
+                    # Make sure we don't exceed the actual duration
+                    chunk_duration = min(
+                        chunk_duration_seconds, duration_seconds - start_time
+                    )
 
-                        chunk_path = self.split_audio_with_ffmpeg(
-                            audio_path, temp_dir, start_time, chunk_duration, i + 1
-                        )
+                    chunk_path = self.split_audio_with_ffmpeg(
+                        audio_path, temp_dir, start_time, chunk_duration, i + 1
+                    )
 
-                        # Verify chunk was created and check size
-                        if os.path.exists(chunk_path):
-                            chunk_size = os.path.getsize(chunk_path)
-                            self.logger.debug(
-                                f"Chunk {i+1} size: {chunk_size/1024/1024:.2f}MB"
-                            )
-                            chunk_paths.append(chunk_path)
-                        else:
-                            raise Exception(f"Failed to create chunk {i+1}")
+                    # Verify chunk was created and check size
+                    if os.path.exists(chunk_path):
+                        chunk_size = os.path.getsize(chunk_path)
+                        self.logger.debug(
+                            f"Chunk {i+1} size: {chunk_size/1024/1024:.2f}MB"
+                        )
+                        chunk_paths.append(chunk_path)
 
                         pbar.update(1)
-
-                    except Exception as e:
-                        self.logger.error(f"Error processing chunk {i+1}: {str(e)}")
-                        raise
 
             self.logger.info(f"Successfully split audio into {len(chunk_paths)} chunks")
             return chunk_paths
@@ -231,48 +211,3 @@ class AudioProcessor:
                 self.cleanup()
             raise
 
-
-def main():
-    """Main function for testing audio processor independently"""
-    parser = argparse.ArgumentParser(description="Extract audio from video file")
-    parser.add_argument(
-        "--input", "-i", required=True, help="Path to the input video file"
-    )
-    parser.add_argument("--output", "-o", help="Output directory", default="output")
-    parser.add_argument(
-        "--keep-chunks", action="store_true", help="Keep temporary chunk files"
-    )
-
-    args = parser.parse_args()
-    logger = setup_logging("AudioProcessorMain")
-
-    processor = AudioProcessor()
-    try:
-        os.makedirs(args.output, exist_ok=True)
-
-        # Extract audio
-        logger.info("Extracting audio...")
-        audio_path = processor.extract_audio(args.input, args.output)
-
-        # Split audio if needed
-        logger.info("Checking if splitting is needed...")
-        chunk_paths = processor.split_audio(audio_path, args.output)
-
-        if len(chunk_paths) > 1:
-            logger.info(f"Audio split into {len(chunk_paths)} chunks:")
-            for path in chunk_paths:
-                logger.info(f"  - {path}")
-        else:
-            logger.info("No splitting needed")
-
-    except Exception as e:
-        logger.error(f"Processing failed: {str(e)}")
-        raise
-
-    finally:
-        if not args.keep_chunks:
-            processor.cleanup()
-
-
-if __name__ == "__main__":
-    main()

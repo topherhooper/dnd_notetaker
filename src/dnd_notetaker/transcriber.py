@@ -8,15 +8,21 @@ from tqdm import tqdm
 
 from .audio_processor import AudioProcessor
 from .utils import save_text_output, setup_logging
+from .config import Config
 
 
 class Transcriber:
-    def __init__(self, api_key):
+    def __init__(self, api_key, config: Config):
         self.logger = setup_logging("Transcriber")
-        self.client = openai.OpenAI(api_key=api_key)
-        self.model = "gpt-4o"
+        self.config = config
+        if not config or not config.dry_run:
+            self.client = openai.OpenAI(api_key=api_key)
+        else:
+            self.client = None
+        self.model = "gpt-4o-transcribe"
+        self.output_dir = config.output_dir
 
-    def get_transcript(self, audio_path, output_dir=None):
+    def get_transcript(self, audio_path):
         """
         Generate transcript using OpenAI's Whisper API
 
@@ -38,7 +44,7 @@ class Transcriber:
             self.logger.info("Preparing audio for transcription...")
             audio_processor = AudioProcessor()
             chunk_paths = audio_processor.split_audio(
-                audio_path, output_dir or os.path.dirname(audio_path)
+                audio_path, self.output_dir or os.path.dirname(audio_path)
             )
 
             # Transcribe each chunk
@@ -71,52 +77,34 @@ class Transcriber:
             self.logger.debug(f"Total transcript length: {len(transcript)} characters")
 
             # Save transcript if output directory provided
-            if output_dir:
-                filepath = save_text_output(transcript, "full_transcript", output_dir)
-                return transcript, filepath
+            filepath = save_text_output(transcript, "full_transcript", output_dir)
+            return transcript, filepath
 
             return transcript, None
 
         except Exception as e:
             self.logger.error(f"Error generating transcript: {str(e)}")
             raise
+    
+    def transcribe(self, audio_path):
+        """
+        Simplified transcribe method for MeetProcessor
+        
+        Args:
+            audio_path: Path to the audio file
+            
+        Returns:
+            str: Transcript text
+        """
+        if self.config and self.config.dry_run:
+            # Dry run mode - just show what would happen
+            print(f"[DRY RUN] Would transcribe audio using OpenAI Whisper:")
+            print(f"  Audio file: {audio_path}")
+            print(f"  Model: whisper-1")
+            print(f"  Estimated cost: ~$0.006 per minute")
+            return "[DRY RUN - No actual transcript]"
+            
+        transcript, _ = self.get_transcript(str(audio_path))
+        return transcript
 
 
-def main():
-    """Main function for testing transcriber independently"""
-    logger = setup_logging("TranscriberMain")
-
-    parser = argparse.ArgumentParser(description="Transcribe audio file")
-    parser.add_argument(
-        "--input", "-i", required=True, help="Path to the input audio file"
-    )
-    parser.add_argument("--output", "-o", help="Output directory", default="output")
-    parser.add_argument(
-        "--config", help="Path to config file", default=".credentials/config.json"
-    )
-
-    args = parser.parse_args()
-    logger.debug(f"Arguments parsed: {args}")
-
-    try:
-        # Load config for API key
-        with open(args.config, "r") as f:
-            config = json.load(f)
-        logger.debug("Config loaded successfully")
-
-        transcriber = Transcriber(config["openai_api_key"])
-        transcript, filepath = transcriber.get_transcript(args.input, args.output)
-
-        if filepath:
-            logger.info(f"Transcript saved to: {filepath}")
-        else:
-            logger.info("Transcript result:")
-            print(transcript)
-
-    except Exception as e:
-        logger.error(f"Transcription failed: {str(e)}")
-        raise
-
-
-if __name__ == "__main__":
-    main()

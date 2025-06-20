@@ -1,0 +1,12 @@
+services:
+  meet-notes:
+    build: .
+    image: meet-notes
+    container_name: meet-notes-processor
+    volumes:
+      - /.meat_notes_configs:/.meat_notes_configs/
+      - /workspaces/dnd_notetaker/meet_notes_output:/meet_notes_output
+    environment:
+      - MEET_NOTES_CONFIG=/.meat_notes_configs/config.json
+    working_dir: /app
+    command: ${FILE_ID:-}
