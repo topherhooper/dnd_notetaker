@@ -1,5 +1,5 @@
 {
   "openai_api_key": "sk-your-openai-api-key-here",
   "google_service_account": ".credentials/service_account.json",
-  "output_dir": "~/meet_notes_output"
+  "output_dir": "./meet_notes_output"
 }

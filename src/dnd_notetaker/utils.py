@@ -10,7 +10,7 @@ def setup_logging(name):
     """Configure logging with timestamps and appropriate formatting"""
     logging.basicConfig(
         level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
         handlers=[logging.StreamHandler()],
     )
     return logging.getLogger(name)

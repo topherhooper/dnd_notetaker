@@ -1,10 +1,12 @@
 """Simplified configuration management for meet_notes"""
 
 import os
+import logging
 import json
 from pathlib import Path
 from typing import Optional
 
+LOGGER = logging.getLogger(__name__)
 
 class Config:
     """Simple configuration management"""
@@ -22,7 +24,7 @@ class Config:
                 self.config_file = Path(env_config)
                 self.config_dir = self.config_file.parent
             else:
-                self.config_dir = Path.home() / ".meet_notes"
+                self.config_dir = Path(".credentials")
                 self.config_file = self.config_dir / "config.json"
         self._config = self._load_config()
         
@@ -36,7 +38,7 @@ class Config:
             default_config = {
                 "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
                 "google_service_account": str(self.config_dir / "service_account.json"),
-                "output_dir": str(Path.home() / "meet_notes_output")
+                "output_dir": "./meet_notes_output"
             }
             
             if not self.dry_run:
@@ -90,7 +92,7 @@ class Config:
         elif env_output := os.environ.get("MEET_NOTES_OUTPUT"):
             path = Path(env_output)
         else:
-            path = Path(self._config.get("output_dir", "~/meet_notes_output")).expanduser()
+            path = Path(self._config.get("output_dir", "./meet_notes_output")).expanduser()
         if not self.dry_run:
             path.mkdir(parents=True, exist_ok=True)
         return path

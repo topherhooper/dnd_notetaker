@@ -10,19 +10,16 @@ from tqdm import tqdm
 from .auth_service_account import GoogleAuthenticator
 
 
-def setup_logging(name):
-    """Configure logging with timestamps and appropriate formatting"""
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()],
-    )
-    return logging.getLogger(name)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+LOGGER = logging.getLogger(__file__)
 
 
 class DriveHandler:
     def __init__(self):
-        self.logger = setup_logging("DriveHandler")
         self.drive_service = None
         
         # Default folder ID for recordings
@@ -31,7 +28,7 @@ class DriveHandler:
         # Initialize Drive service at startup
         self.setup_drive_service()
 
-        self.logger.debug("DriveHandler initialized with Drive service")
+        LOGGER.debug("DriveHandler initialized with Drive service")
 
     def setup_drive_service(self):
         """Set up Google Drive API service using service account authentication"""
@@ -86,11 +83,11 @@ class DriveHandler:
                     "modified_time": file.get("modifiedTime", ""),
                 })
                 
-            self.logger.info(f"Found {len(recordings)} recordings in Drive folder")
+            LOGGER.info(f"Found {len(recordings)} recordings in Drive folder")
             return recordings
             
         except Exception as e:
-            self.logger.error(f"Error listing Drive folder recordings: {str(e)}")
+            LOGGER.error(f"Error listing Drive folder recordings: {str(e)}")
             raise
 
     def download_file(self, file_id, download_dir):
@@ -127,29 +124,29 @@ class DriveHandler:
 
             safe_filename = self.sanitize_filename(original_name)
 
-            self.logger.info(f"Found Drive file: {original_name}")
-            self.logger.info(f"MIME type: {mime_type}")
-            self.logger.info(f"File size: {file_size / (1024*1024):.2f} MB")
+            LOGGER.info(f"Found Drive file: {original_name}")
+            LOGGER.info(f"MIME type: {mime_type}")
+            LOGGER.info(f"File size: {file_size / (1024*1024):.2f} MB")
 
             # Check if file already exists
             filepath = os.path.join(download_dir, safe_filename)
             if os.path.exists(filepath):
                 existing_size = os.path.getsize(filepath)
                 if existing_size == file_size:
-                    self.logger.info("=" * 60)
-                    self.logger.info("SKIPPING DOWNLOAD - File already exists")
-                    self.logger.info(f"File: {filepath}")
-                    self.logger.info(f"Size: {file_size / (1024*1024):.2f} MB")
-                    self.logger.info("=" * 60)
+                    LOGGER.info("=" * 60)
+                    LOGGER.info("SKIPPING DOWNLOAD - File already exists")
+                    LOGGER.info(f"File: {filepath}")
+                    LOGGER.info(f"Size: {file_size / (1024*1024):.2f} MB")
+                    LOGGER.info("=" * 60)
                     return filepath
                 else:
-                    self.logger.warning(f"File exists but size differs.")
-                    self.logger.warning(
+                    LOGGER.warning(f"File exists but size differs.")
+                    LOGGER.warning(
                         f"Expected: {file_size} bytes, Found: {existing_size} bytes"
                     )
-                    self.logger.info("Redownloading...")
+                    LOGGER.info("Redownloading...")
             else:
-                self.logger.info("File doesn't exist. Starting download...")
+                LOGGER.info("File doesn't exist. Starting download...")
 
             # Ensure directory exists
             os.makedirs(download_dir, exist_ok=True)
@@ -176,20 +173,20 @@ class DriveHandler:
                             pbar.update(progress - last_progress)
                             last_progress = progress
 
-            self.logger.info(f"Download complete: {filepath}")
+            LOGGER.info(f"Download complete: {filepath}")
 
             # Log successful download
             final_size = os.path.getsize(filepath)
-            self.logger.info("=" * 60)
-            self.logger.info("DOWNLOAD COMPLETED SUCCESSFULLY")
-            self.logger.info(f"File: {filepath}")
-            self.logger.info(f"Size: {final_size / (1024*1024):.2f} MB")
-            self.logger.info("=" * 60)
+            LOGGER.info("=" * 60)
+            LOGGER.info("DOWNLOAD COMPLETED SUCCESSFULLY")
+            LOGGER.info(f"File: {filepath}")
+            LOGGER.info(f"Size: {final_size / (1024*1024):.2f} MB")
+            LOGGER.info("=" * 60)
 
             return filepath
 
         except Exception as e:
-            self.logger.error(f"Error downloading from Drive: {str(e)}")
+            LOGGER.error(f"Error downloading from Drive: {str(e)}")
             raise
 
     def check_existing_downloads(self, name_filter, download_dir):
@@ -210,7 +207,7 @@ class DriveHandler:
                 ):
                     filepath = os.path.join(download_dir, filename)
                     file_size = os.path.getsize(filepath)
-                    self.logger.info(
+                    LOGGER.info(
                         f"Found existing file: {filename} ({file_size / (1024*1024):.2f} MB)"
                     )
                     return filepath
@@ -223,11 +220,11 @@ class DriveHandler:
         # Try to find exact match first
         for recording in recordings:
             if name_filter.lower() in recording["file_name"].lower():
-                self.logger.info(f"Found matching recording: {recording['file_name']}")
+                LOGGER.info(f"Found matching recording: {recording['file_name']}")
                 return recording
         
         # If no match found, return None
-        self.logger.warning(f"No recording found matching: {name_filter}")
+        LOGGER.warning(f"No recording found matching: {name_filter}")
         return None
 
     def download_recording(self, name_filter, download_dir, folder_id=None):
@@ -236,11 +233,11 @@ class DriveHandler:
             # First check if we already have the file
             existing_file = self.check_existing_downloads(name_filter, download_dir)
             if existing_file:
-                self.logger.info("=" * 60)
-                self.logger.info("USING EXISTING DOWNLOAD")
-                self.logger.info(f"File: {existing_file}")
-                self.logger.info("Skipping Drive search and download")
-                self.logger.info("=" * 60)
+                LOGGER.info("=" * 60)
+                LOGGER.info("USING EXISTING DOWNLOAD")
+                LOGGER.info(f"File: {existing_file}")
+                LOGGER.info("Skipping Drive search and download")
+                LOGGER.info("=" * 60)
                 return existing_file
 
             # Find recording in Drive
@@ -252,7 +249,7 @@ class DriveHandler:
             return self.download_file(recording["file_id"], download_dir)
 
         except Exception as e:
-            self.logger.error(f"Error in download_recording: {str(e)}")
+            LOGGER.error(f"Error in download_recording: {str(e)}")
             raise
 
 

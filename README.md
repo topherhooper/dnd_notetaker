@@ -149,7 +149,7 @@ This is useful for:
 
 All outputs are saved to timestamped directories:
 ```
-~/meet_notes_output/
+./meet_notes_output/
 └── 2025_01_19_150230/
     ├── meeting.mp4        # Original recording
     ├── audio.mp3          # Extracted audio

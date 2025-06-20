@@ -77,7 +77,7 @@ Single config file at `.credentials/config.json`:
 {
   "openai_api_key": "sk-...",
   "google_service_account": "path/to/service_account.json",
-  "output_dir": "~/meet_notes_output"
+  "output_dir": "./meet_notes_output"
 }
 ```
 

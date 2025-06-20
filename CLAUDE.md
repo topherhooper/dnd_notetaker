@@ -16,7 +16,7 @@ The following files contain detailed documentation that Claude Code should refer
    - Claude Code MUST maintain this file when creating or modifying tests
    - Update when adding new test files or test scenarios
 
-3. **~/.claude/CLAUDE-mylocaldevenvironment.md** - Local development environment details
+3. **./.claude/CLAUDE-mylocaldevenvironment.md** - Local development environment details
    - Read-only file describing the Linux VM, Parallels setup, Docker containers
    - Claude Code must NOT edit this file (if it exists)
 

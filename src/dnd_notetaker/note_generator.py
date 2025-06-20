@@ -18,6 +18,7 @@ class NoteGenerator:
         else:
             self.client = None
         self.model = "o4-mini"
+        self.max_tokens = 200000  # Max tokens for OpenAI models
         
     def generate(self, transcript: str) -> str:
         """Generate prose-style notes from transcript
@@ -55,10 +56,10 @@ class NoteGenerator:
             # Combine summaries into final notes
             return self._combine_summaries(chunk_summaries)
     
-    def _split_transcript(self, transcript: str, max_tokens: int = 12000) -> List[str]:
+    def _split_transcript(self, transcript: str) -> List[str]:
         """Split transcript into processable chunks"""
         # Rough estimate: 1 token H 4 characters
-        max_chars = max_tokens * 4
+        max_chars = self.max_tokens * 4
         
         if len(transcript) <= max_chars:
             return [transcript]
@@ -107,8 +108,6 @@ Write the summary as a cohesive narrative that captures the essence of the meeti
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": f"Please summarize this meeting transcript:\n\n{transcript}"}
             ],
-            temperature=0.7,
-            max_tokens=2000
         )
         
         return response.choices[0].message.content.strip() if response.choices[0].message.content else ""
@@ -131,8 +130,6 @@ Focus on the key discussions, decisions, and action items in this segment."""
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": f"Summarize this meeting segment:\n\n{chunk}"}
             ],
-            temperature=0.7,
-            max_tokens=1000
         )
         
         return response.choices[0].message.content.strip() if response.choices[0].message.content else ""
@@ -160,8 +157,6 @@ IMPORTANT:
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": f"Combine these meeting summaries:\n\n{combined}"}
             ],
-            temperature=0.7,
-            max_tokens=3000
         )
         
         return response.choices[0].message.content.strip() if response.choices[0].message.content else ""

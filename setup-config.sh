@@ -53,7 +53,7 @@ cat > .credentials/config.json << EOF
 {
   "openai_api_key": "${openai_key}",
   "google_service_account": "${service_account}",
-  "output_dir": "~/meet_notes_output"
+  "output_dir": "./meet_notes_output"
 }
 EOF
 
