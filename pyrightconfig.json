@@ -1,0 +1,18 @@
+{
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "venv",
+    "build",
+    "dist"
+  ],
+  "typeCheckingMode": "standard",
+  "pythonVersion": "3.9",
+  "pythonPlatform": "Linux",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "reportPrivateUsage": false
+}

@@ -29,6 +29,9 @@ class DocsUploader:
     def create_document(self, title):
         """Create a new Google Doc with the given title"""
         try:
+            if not self.docs_service:
+                raise RuntimeError("Docs service not initialized. Call setup_services() first.")
+            
             self.logger.info(f"Creating new document: {title}")
             document = (
                 self.docs_service.documents().create(body={"title": title}).execute()
@@ -58,6 +61,9 @@ class DocsUploader:
     def update_document_content(self, doc_id, content):
         """Update the content of an existing Google Doc"""
         try:
+            if not self.docs_service:
+                raise RuntimeError("Docs service not initialized. Call setup_services() first.")
+            
             self.logger.info(f"Updating document: {doc_id}")
 
             requests = [{"insertText": {"location": {"index": 1}, "text": content}}]
@@ -75,6 +81,9 @@ class DocsUploader:
     def share_document(self, doc_id, email=None, role="reader"):
         """Share the document with specific email or make it viewable with link"""
         try:
+            if not self.drive_service:
+                raise RuntimeError("Drive service not initialized. Call setup_services() first.")
+            
             if email:
                 self.logger.info(f"Sharing document with {email}")
                 permission = {"type": "user", "role": role, "emailAddress": email}
@@ -138,45 +147,3 @@ class DocsUploader:
             raise
 
 
-def main():
-    """Main function for testing docs uploader independently"""
-    logger = setup_logging("DocsUploaderMain")
-
-    parser = argparse.ArgumentParser(description="Upload notes to Google Docs")
-    parser.add_argument(
-        "--input", "-i", required=True, help="Path to the input notes file"
-    )
-    parser.add_argument("--title", "-t", help="Title for the Google Doc")
-    parser.add_argument(
-        "--share", "-s", help="Email address to share the document with"
-    )
-    parser.add_argument(
-        "--no-public-share",
-        action="store_true",
-        help="Do not make document publicly accessible with link",
-    )
-
-    args = parser.parse_args()
-    logger.debug(f"Arguments parsed: {args}")
-
-    try:
-        uploader = DocsUploader()
-        doc_url = uploader.upload_notes(
-            args.input,
-            title=args.title,
-            share_email=args.share,
-            share_publicly=not args.no_public_share,
-        )
-
-        print(f"\nDocument uploaded successfully!")
-        print(f"URL: {doc_url}")
-        if not args.no_public_share:
-            print("Document is accessible to anyone with the link")
-
-    except Exception as e:
-        logger.error(f"Upload failed: {str(e)}")
-        raise
-
-
-if __name__ == "__main__":
-    main()

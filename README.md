@@ -1,96 +1,54 @@
-# D&D Notetaker
+# Meet Notes
 
-Automated D&D session recording processor that transforms Google Meet recordings into structured narrative session notes.
+Streamlined Google Meet recording processor that automatically generates natural prose-style meeting notes.
 
 ## Features
 
-- **Automated Download**: Downloads session recordings directly from Google Drive
-- **Smart Organization**: Automatically creates organized session directories
-- **Audio Processing**: Extracts and optimizes audio from video recordings
-- **AI Transcription**: Generates accurate transcripts using OpenAI's Whisper API
-- **Intelligent Processing**: Transforms raw transcripts into structured narrative notes:
-  - Identifies and labels speakers (DM, players, characters)
-  - Separates out-of-character discussions
-  - Marks important game mechanics moments
-  - Highlights memorable quotes and key events
-  - Identifies session recap sections
-- **Improved Transcript Processing** (v2):
-  - Smart chunking for large transcripts
-  - Language detection and filtering
-  - Cost-effective two-stage processing
-  - Better speaker identification
-- **Google Docs Integration**: Automatically uploads notes to Google Docs
-- **Comprehensive Logging**: Detailed progress tracking and error reporting
+- 📥 **Automatic Download** - Fetches recordings directly from Google Drive
+- 🎵 **Audio Extraction** - Optimized audio processing with FFmpeg
+- 📝 **AI Transcription** - Accurate transcripts using OpenAI Whisper
+- 📖 **Natural Notes** - Flowing prose narrative (no bullets or structure)
+- 🌐 **HTML Viewer** - All artifacts in one shareable page
+- ⚡ **Smart Processing** - Skips completed expensive operations
+- 🐳 **Docker Support** - Zero-setup containerized execution
 
-## Quick Start
+## Quick Start (Docker - Recommended)
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/[username]/dnd_notetaker.git
+   cd dnd_notetaker
+   ```
 
-### Using Make (Recommended)
+2. **One-time setup**:
+   ```bash
+   make docker-setup
+   ```
 
-```bash
-# Complete setup (virtual environment, dependencies, system checks)
-make setup
+3. **Configure** (see [Configuration](#configuration) for details):
+   - Copy `config.example.json` to `.credentials/config.json` and update values
+   - Add your Google service account key to `.credentials/service_account.json`
 
-# Process a session recording
-make process
+4. **Run**:
+   ```bash
+   # Process most recent recording
+   make run
+   
+   # Process specific recording
+   make run-file FILE_ID=1a2b3c4d5e6f
+   ```
 
-# Process with recording name filter
-make process-name NAME="DnD Thursday Session"
+## Prerequisites
 
-# Process with Google Drive file ID
-make process-id ID="your-file-id-here"
+### For Docker (Recommended)
+- Docker installed on your system
+- That's it! Docker handles Python, FFmpeg, and all dependencies
 
-# Interactive mode - select from list
-make interactive
+### For Local Development
+- Python 3.9+
+- FFmpeg (for audio processing)
+- Virtual environment (recommended)
 
-# Run tests
-make test
-
-# See all available commands
-make help
-```
-
-### Manual Setup
-
-```bash
-# Clone repository
-git clone [repository-url]
-cd dnd_notetaker
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: .\venv\Scripts\activate
-
-# Install package in development mode
-pip install -e .
-
-# Set up credentials
-python scripts/setup_credentials.py
-```
-
-## Project Structure
-
-```
-dnd_notetaker/
-├── src/dnd_notetaker/      # Main package
-│   ├── main.py             # Main entry point
-│   ├── audio_processor.py  # Audio extraction
-│   ├── transcriber.py      # Whisper transcription
-│   ├── transcript_processor.py  # GPT-4 processing
-│   ├── docs_uploader.py    # Google Docs upload
-│   ├── drive_handler.py    # Google Drive download
-│   └── utils.py            # Shared utilities
-├── scripts/                # Utility scripts
-│   ├── setup.sh           # Setup script
-│   ├── setup_credentials.py  # Credential setup
-├── tests/                  # Test suite
-├── Makefile               # Build automation
-└── requirements.txt       # Dependencies
-```
-
-## Configuration
-
-### 1. Install System Dependencies
-
+#### Install FFmpeg locally:
 ```bash
 # Ubuntu/Debian
 sudo apt-get update && sudo apt-get install ffmpeg
@@ -98,202 +56,228 @@ sudo apt-get update && sudo apt-get install ffmpeg
 # macOS
 brew install ffmpeg
 
-# Windows
-# Download from https://ffmpeg.org/download.html
+# Windows - download from https://ffmpeg.org/download.html
 ```
 
-### 2. Set Up API Credentials
+## Configuration
 
-The application requires:
-- Google Service Account with Drive and Docs API access
-- OpenAI API key for transcription and processing
-
-Run the credential setup:
-```bash
-make setup-creds
-# Or manually:
-python scripts/setup_credentials.py
-```
-
-This creates `.credentials/config.json` with your API keys.
-
-### 3. Google Service Account
+### 1. Google Service Account
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select existing
-3. Enable Google Drive API and Google Docs API
-4. Create a Service Account with appropriate permissions
-5. Download the JSON key file
-6. Save as `.credentials/service_account.json`
+3. Enable **Google Drive API** and **Google Docs API**
+4. Create a Service Account:
+   - Go to "IAM & Admin" > "Service Accounts"
+   - Click "Create Service Account"
+   - Download the JSON key file
+5. Save the key file to `.credentials/service_account.json`
+6. Share your Google Drive folder with the service account email
+
+### 2. OpenAI API Key
+
+1. Go to [OpenAI Platform](https://platform.openai.com/)
+2. Create an account or sign in
+3. Navigate to API keys section
+4. Create a new API key
+5. Add to your config file
 
 ## Usage
 
-### Full Pipeline
-
-Process a recording from Google Drive to Google Docs:
-```bash
-# Using Make
-make process
-
-# Interactive mode - select from available recordings
-make interactive
-
-# Using Python module
-python -m dnd_notetaker.main process
-
-# Interactive mode with Python
-python -m dnd_notetaker.main interactive
-
-# With custom output directory
-python -m dnd_notetaker.main process -o custom_directory
-
-# Filter by recording name
-python -m dnd_notetaker.main process --name "DnD Thursday Session"
-
-# Process by Google Drive file ID
-python -m dnd_notetaker.main process --id "your-file-id-here"
-
-# Keep temporary files for debugging
-python -m dnd_notetaker.main process --keep-temp
-```
-
-### Individual Components
-
-Run specific parts of the pipeline:
-```bash
-# Download recording only
-make download
-
-# Extract audio from video
-make extract-audio VIDEO=path/to/video.mp4
-
-# Generate transcript
-make transcribe AUDIO=path/to/audio.mp3
-
-# Process transcript into notes
-make process-notes TRANSCRIPT=path/to/transcript.txt
-
-# Upload to Google Docs
-make upload-docs NOTES=path/to/notes.txt TITLE="Session Title"
-```
-
-### Utility Commands
+### Docker Usage (Recommended)
 
 ```bash
-# List temporary directories
-make list-sessions
+# Process the most recent Meet recording
+make run
 
-# Clean up old temporary files
-make clean-sessions
+# Process a specific recording by file ID
+make run-file FILE_ID=1a2b3c4d5e6f
 
-# Run tests with coverage
-make test-coverage
-
-# Format code
-make format
-
-# Run linting
-make lint
+# See all available commands
+make help
 ```
 
+### Local Usage (Development)
 
-## Directory Organization
+```bash
+# Setup local environment
+make setup
+source venv/bin/activate
 
-The processor automatically creates organized directories based on recording filenames:
+# Process the most recent Meet recording
+python -m dnd_notetaker
 
-**Input**: `"DnD - 2025-01-10 18-41 CST - Recording.mp4"`
+# Process a specific recording by file ID
+python -m dnd_notetaker 1a2b3c4d5e6f
 
-**Creates**:
+# Test what would happen without executing (dry-run mode)
+python -m dnd_notetaker --dry-run
+python -m dnd_notetaker 1a2b3c4d5e6f --dry-run
 ```
-output/
-└── dnd_sessions_2025_01_10/
-    ├── DnD - 2025-01-10 18-41 CST - Recording.mp4
-    ├── session_audio.mp3
-    ├── full_transcript_*.txt
-    ├── processed_notes_*.txt
-    └── summary_*.json
+
+### Dry-Run Mode
+
+The `--dry-run` flag allows you to see what operations would be performed without actually executing them:
+
+```bash
+# See what would happen without downloading/processing
+python -m dnd_notetaker FILE_ID --dry-run
+
+# Example output:
+[DRY RUN] Would download from Google Drive:
+  File ID: FILE_ID
+  Destination: /path/to/output/meeting.mp4
+[DRY RUN] Would extract audio using FFmpeg:
+  Input: /path/to/output/meeting.mp4
+  Output: /path/to/output/audio.mp3
+[DRY RUN] Would transcribe audio using OpenAI Whisper:
+  Audio file: /path/to/output/audio.mp3
+  Model: gpt-4o-transcribe
+  Estimated cost: ~$0.006 per minute
+[DRY RUN] Would generate notes using OpenAI GPT:
+  Model: o4-mini
+  Transcript length: 0 characters
+[DRY RUN] Would save artifacts to: /path/to/output/
 ```
 
-## Smart Checkpointing
+This is useful for:
+- Testing configuration changes
+- Understanding the processing pipeline
+- Debugging without running expensive operations
+- Running without credentials for testing
 
-The processor includes intelligent checkpointing to avoid redundant work:
+### Output Structure
 
-1. **Session Already Processed**: If at least 2 key output files exist, the entire session is skipped
-2. **Audio Extraction**: Skipped if `session_audio.mp3` already exists
-3. **Transcript Generation**: Skipped if `full_transcript_*.txt` already exists (uses most recent)
-4. **Resumable Processing**: You can re-run the processor on partial sessions to complete remaining steps
+All outputs are saved to timestamped directories:
+```
+./meet_notes_output/
+└── 2025_01_19_150230/
+    ├── meeting.mp4        # Original recording
+    ├── audio.mp3          # Extracted audio
+    ├── transcript.txt     # Raw transcription
+    ├── notes.txt          # Natural prose notes
+    ├── artifacts.json     # Metadata
+    └── index.html         # 🌐 View everything here!
+```
 
-This is especially useful for:
-- Recovering from interruptions
-- Re-processing with different settings
-- Debugging specific pipeline stages
+### Example Notes
+
+The tool generates natural, flowing prose:
+
+> The meeting began with John welcoming everyone and outlining the agenda for the product launch discussion. Sarah immediately raised concerns about the March timeline, particularly emphasizing that the testing phase needed at least two additional weeks to ensure quality. After considerable discussion involving the entire team, they collectively agreed to push the launch to early April. Michael took responsibility for updating the project timeline and committed to communicating the change to all stakeholders by end of week...
+
+## How It Works
+
+1. **Downloads** your Google Meet recording from Drive
+2. **Extracts** audio using FFmpeg (optimized for speech)
+3. **Transcribes** using OpenAI's Whisper API
+4. **Generates** natural prose notes using GPT-4
+5. **Creates** an HTML viewer with all artifacts
+
+The tool intelligently skips completed steps if you run it again on the same recording.
+
+## Troubleshooting
+
+### "make run" doesn't work
+
+If you see errors about missing config or service account:
+
+1. **Run the setup helper**:
+   ```bash
+   ./setup-config.sh
+   ```
+
+2. **Check your config**:
+   ```bash
+   cat .credentials/config.json
+   ```
+   Make sure:
+   - `openai_api_key` is set (starts with `sk-`)
+   - `google_service_account` points to your JSON file
+
+3. **Verify service account exists**:
+   ```bash
+   ls -la .credentials/service_account.json
+   ```
+   If missing, download from Google Cloud Console
+
+### Other Common Issues
+
+- **FFmpeg not found**: Make sure FFmpeg is installed and in your PATH
+- **No recordings found**: Verify your service account has access to the Drive folder
+- **API errors**: Check your OpenAI API key has sufficient credits
+
+### Debug Mode
+
+```bash
+export LOG_LEVEL=DEBUG
+python -m meet_notes
+```
+
+## Available Commands
+
+```bash
+make help          # Show all available commands
+make build         # Build Docker image
+make run           # Process most recent recording
+make run-file      # Process specific recording
+make setup         # Setup local development
+make test          # Run test suite
+make clean         # Clean build artifacts
+```
 
 ## Development
+
+### Development Setup
+
+```bash
+# Clone repository
+git clone https://github.com/[username]/dnd_notetaker.git
+cd dnd_notetaker
+
+# Quick setup
+make setup
+source venv/bin/activate
+
+# Or manually:
+python -m venv venv
+source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+pip install -e .
+```
 
 ### Running Tests
 
 ```bash
-# All tests
-make test
+# Run all tests
+python -m pytest
 
-# With coverage
-make test-coverage
-
-# Specific test file
-python -m pytest tests/test_audio_processor.py -v
+# Run with coverage
+python -m pytest --cov=dnd_notetaker
 ```
 
-### Code Quality
+### Project Structure
 
-```bash
-# Format code with black and isort
-make format
-
-# Run linting
-make lint
-
-# Clean temporary files
-make clean
-
-# Clean everything (including venv)
-make clean-all
 ```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests (`make test`)
-5. Format code (`make format`)
-6. Commit changes (`git commit -m 'Add amazing feature'`)
-7. Push to branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
-
-## Troubleshooting
-
-### Common Issues
-
-1. **FFmpeg not found**: Install FFmpeg for your system (see Configuration)
-2. **API rate limits**: The processor includes automatic retries and chunking
-3. **Large files**: Audio is automatically chunked for Whisper API limits
-4. **Authentication errors**: Ensure service account has proper permissions
-
-### Debug Mode
-
-Enable detailed logging:
-```bash
-export LOG_LEVEL=DEBUG
-python -m dnd_notetaker.main process
+dnd_notetaker/
+├── Dockerfile                 # Container definition
+├── Makefile                   # Simple command interface
+├── docker-compose.yml         # Docker Compose config
+├── src/dnd_notetaker/
+│   ├── meet_notes.py          # Main entry point
+│   ├── meet_processor.py      # Pipeline orchestrator
+│   ├── audio_extractor.py     # Audio extraction
+│   ├── note_generator.py      # GPT-4 notes generation
+│   ├── artifacts.py           # Output management
+│   └── config.py              # Configuration
+└── tests/                     # Test suite
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file for details.
 
 ## Acknowledgments
 
 - OpenAI Whisper for transcription
-- GPT-4 for intelligent text processing
-- Google APIs for Drive and Docs integration
-- MoviePy for video processing
+- GPT-4 for natural language processing
+- Google APIs for Drive integration
+- FFmpeg for audio processing

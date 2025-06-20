@@ -9,26 +9,36 @@ This package provides tools for processing D&D session recordings:
 - Upload notes to Google Docs
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 from .audio_processor import AudioProcessor
 from .docs_uploader import DocsUploader
 from .drive_handler import DriveHandler
 
 # Import main components for easier access
-from .main import MeetingProcessor
 from .transcriber import Transcriber
-from .transcript_processor import TranscriptProcessor
-from .utils import cleanup_old_temp_directories, list_temp_directories, setup_logging
+from .utils import setup_logging
+
+# Import new simplified components
+from .meet_processor import MeetProcessor
+from .audio_extractor import AudioExtractor
+from .note_generator import NoteGenerator
+from .artifacts import Artifacts
+from .simplified_drive_handler import SimplifiedDriveHandler
+from .config import Config
 
 __all__ = [
-    "MeetingProcessor",
+    # Legacy components
     "AudioProcessor",
     "Transcriber",
-    "TranscriptProcessor",
     "DocsUploader",
     "DriveHandler",
     "setup_logging",
-    "cleanup_old_temp_directories",
-    "list_temp_directories",
+    # New simplified components
+    "MeetProcessor",
+    "AudioExtractor",
+    "NoteGenerator",
+    "Artifacts",
+    "SimplifiedDriveHandler",
+    "Config",
 ]

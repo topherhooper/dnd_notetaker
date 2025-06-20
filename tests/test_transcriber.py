@@ -6,31 +6,40 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 
 from dnd_notetaker.transcriber import Transcriber
+from dnd_notetaker.config import Config
 
 
 class TestTranscriber:
     def setup_method(self):
         self.api_key = "test_api_key"
         self.temp_dir = tempfile.mkdtemp()
+        
+        # Create a mock config
+        self.mock_config = MagicMock(spec=Config)
+        self.mock_config.dry_run = False
+        self.mock_config.output_dir = self.temp_dir
 
         # Mock the OpenAI client
         with patch("dnd_notetaker.transcriber.openai.OpenAI") as mock_openai_class:
             self.mock_client = MagicMock()
             mock_openai_class.return_value = self.mock_client
-            self.transcriber = Transcriber(self.api_key)
+            self.transcriber = Transcriber(self.api_key, self.mock_config)
 
     def teardown_method(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_init(self):
-        assert self.transcriber.model == "gpt-4o"
+        assert self.transcriber.model == "gpt-4o-transcribe"
         assert hasattr(self.transcriber, "logger")
         assert hasattr(self.transcriber, "client")
         assert self.transcriber.client == self.mock_client
 
     @patch("dnd_notetaker.transcriber.openai.OpenAI")
     def test_init_creates_openai_client(self, mock_openai):
-        transcriber = Transcriber("test_key")
+        mock_config = MagicMock(spec=Config)
+        mock_config.dry_run = False
+        mock_config.output_dir = self.temp_dir
+        transcriber = Transcriber("test_key", mock_config)
         mock_openai.assert_called_once_with(api_key="test_key")
 
     @patch("builtins.open", new_callable=mock_open, read_data=b"audio data")
@@ -51,11 +60,12 @@ class TestTranscriber:
 
         # Verify
         assert transcript == mock_transcript
-        assert filepath is None  # No output_dir provided
+        # filepath is not None because output_dir comes from config
+        assert filepath is not None
 
         # Verify API call
         self.mock_client.audio.transcriptions.create.assert_called_once_with(
-            model="whisper-1", file=mock_file(), response_format="text"
+            model="gpt-4o-transcribe", file=mock_file(), response_format="text"
         )
 
     @patch("builtins.open", new_callable=mock_open, read_data=b"audio data")
@@ -77,11 +87,9 @@ class TestTranscriber:
         )
         mock_save.return_value = expected_path
 
-        # Call get_transcript with output directory
+        # Call get_transcript (output directory comes from config)
         audio_path = "test_audio.mp3"
-        transcript, filepath = self.transcriber.get_transcript(
-            audio_path, self.temp_dir
-        )
+        transcript, filepath = self.transcriber.get_transcript(audio_path)
 
         # Verify
         assert transcript == mock_transcript
@@ -126,7 +134,8 @@ class TestTranscriber:
         transcript, filepath = self.transcriber.get_transcript("test_audio.mp3")
 
         assert transcript == ""
-        assert filepath is None
+        # filepath is not None because output_dir comes from config
+        assert filepath is not None
 
     @patch("builtins.open", new_callable=mock_open, read_data=b"audio data")
     @patch("os.path.exists", return_value=True)
@@ -160,4 +169,4 @@ class TestTranscriber:
         mock_save.side_effect = Exception("Save error")
 
         with pytest.raises(Exception, match="Save error"):
-            self.transcriber.get_transcript("test_audio.mp3", self.temp_dir)
+            self.transcriber.get_transcript("test_audio.mp3")

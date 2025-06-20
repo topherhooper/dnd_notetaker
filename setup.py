@@ -33,7 +33,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "dnd-notetaker=dnd_notetaker.main:main",
+            "meet-notes=dnd_notetaker.meet_notes:main",
         ],
     },
     include_package_data=True,
