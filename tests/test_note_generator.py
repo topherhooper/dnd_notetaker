@@ -32,7 +32,7 @@ class TestNoteGenerator:
         mock_config = Mock(spec=Config)
         mock_config.dry_run = False
         with patch('openai.OpenAI') as mock_openai:
-            generator = NoteGenerator("test-key", mock_config)
+            generator = NoteGenerator("test-key", config=mock_config, max_tokens=1000)
             mock_openai.assert_called_once_with(api_key="test-key")
     
     def test_generate_single_chunk(self, generator, mock_response):
@@ -57,32 +57,32 @@ class TestNoteGenerator:
     
     def test_generate_multiple_chunks(self, generator):
         """Test generating notes from a long transcript with multiple chunks"""
-        # Create a very long transcript
-        long_transcript = "This is a very long transcript. " * 10000
-        
-        # Setup mock responses for chunks
-        chunk_responses = []
-        for i in range(3):
-            response = Mock()
-            response.choices = [Mock()]
-            response.choices[0].message.content = f"Chunk {i} summary"
-            chunk_responses.append(response)
-        
-        # Add final combination response
-        final_response = Mock()
-        final_response.choices = [Mock()]
-        final_response.choices[0].message.content = "Combined final notes"
+        # Create a very long transcript that will be split into chunks
+        # With max_tokens=200000, and 1 token ≈ 4 chars, max_chars = 800000
+        # Make transcript longer than this to ensure chunking
+        long_transcript = "This is a very long transcript. " * 30000  # ~960000 chars
         
         # Calculate expected number of chunks
-        expected_chunks = len(generator._split_transcript(long_transcript))
+        chunks = generator._split_transcript(long_transcript)
+        expected_chunks = len(chunks)
+        
+        # Setup mock responses for each chunk + final combination
         all_responses = []
+        
+        # Add responses for each chunk summary
         for i in range(expected_chunks):
             response = Mock()
             response.choices = [Mock()]
             response.choices[0].message.content = f"Chunk {i} summary"
             all_responses.append(response)
-        all_responses.append(final_response)  # Add combination response
         
+        # Add final combination response
+        final_response = Mock()
+        final_response.choices = [Mock()]
+        final_response.choices[0].message.content = "Combined final notes"
+        all_responses.append(final_response)
+        
+        # Set up the mock to return these responses in order
         generator.client.chat.completions.create.side_effect = all_responses
         
         # Generate notes
@@ -101,12 +101,14 @@ class TestNoteGenerator:
         assert chunks[0] == short_transcript
         
         # Test long transcript (should split)
-        long_transcript = "This is a sentence. " * 5000
-        chunks = generator._split_transcript(long_transcript, max_tokens=1000)
+        # With max_tokens=200000, max_chars = 800000
+        # Make transcript longer than this to ensure splitting
+        long_transcript = "This is a sentence. " * 50000  # ~1,000,000 chars
+        chunks = generator._split_transcript(long_transcript)
         assert len(chunks) > 1
         
         # Verify chunks don't exceed max size
-        max_chars = 1000 * 4  # 1 token ≈ 4 chars
+        max_chars = generator.max_tokens * 4  # 1 token ≈ 4 chars
         for chunk in chunks:
             assert len(chunk) <= max_chars * 1.2  # Allow some margin
     

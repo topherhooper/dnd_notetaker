@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 class NoteGenerator:
     """Generate narrative-style notes from meeting transcripts"""
     
-    def __init__(self, api_key: str, config=None):
+    def __init__(self, api_key: str, config=None, max_tokens = 200000):
         self.config = config
         if not config or not config.dry_run:
             self.client = openai.OpenAI(api_key=api_key)
         else:
             self.client = None
         self.model = "o4-mini"
-        self.max_tokens = 200000  # Max tokens for OpenAI models
+        self.max_tokens = max_tokens  # Max tokens for OpenAI models
         
     def generate(self, transcript: str) -> str:
         """Generate prose-style notes from transcript

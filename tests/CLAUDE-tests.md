@@ -31,7 +31,6 @@ This file documents all test scripts in the tests/ directory. Claude Code is res
 **Key Test Scenarios**:
 - `test_main_no_args`: Processing with no arguments (most recent)
 - `test_main_with_file_id`: Processing with specific file ID
-- `test_main_handles_keyboard_interrupt`: Graceful Ctrl+C handling
 - `test_main_handles_errors`: General error handling
 
 **Mocked Dependencies**:
