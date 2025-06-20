@@ -103,7 +103,7 @@ def transcribe(self, audio_path):
     if self.config.dry_run:
         print(f"[DRY RUN] Would transcribe audio using OpenAI Whisper:")
         print(f"  Audio file: {audio_path}")
-        print(f"  Model: whisper-1")
+        print(f"  Model: gpt-4o-transcribe")
         print(f"  Estimated cost: ~$0.006 per minute")
         return {"text": "[DRY RUN - No actual transcript]"}
     # ... actual implementation
@@ -457,7 +457,7 @@ $ python -m dnd_notetaker ABC123 --dry-run
   
 [DRY RUN] Would transcribe audio using OpenAI Whisper:
   Audio file: /tmp/dnd_output/audio.mp3
-  Model: whisper-1
+  Model: gpt-4o-transcribe
   Estimated cost: ~$0.006 per minute
   
 [DRY RUN] Would generate notes using OpenAI GPT:

@@ -65,7 +65,7 @@ class Transcriber:
                             raise RuntimeError("OpenAI client not initialized (check dry_run mode)")
                             
                         chunk_transcript = self.client.audio.transcriptions.create(
-                            model="whisper-1", file=audio_file, response_format="text"
+                            model="gpt-4o-transcribe", file=audio_file, response_format="text"
                         )
                     transcripts.append(chunk_transcript)
                     pbar.update(1)
@@ -104,7 +104,7 @@ class Transcriber:
             # Dry run mode - just show what would happen
             print(f"[DRY RUN] Would transcribe audio using OpenAI Whisper:")
             print(f"  Audio file: {audio_path}")
-            print(f"  Model: whisper-1")
+            print(f"  Model: gpt-4o-transcribe")
             print(f"  Estimated cost: ~$0.006 per minute")
             return "[DRY RUN - No actual transcript]"
             

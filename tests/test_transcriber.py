@@ -65,7 +65,7 @@ class TestTranscriber:
 
         # Verify API call
         self.mock_client.audio.transcriptions.create.assert_called_once_with(
-            model="whisper-1", file=mock_file(), response_format="text"
+            model="gpt-4o-transcribe", file=mock_file(), response_format="text"
         )
 
     @patch("builtins.open", new_callable=mock_open, read_data=b"audio data")

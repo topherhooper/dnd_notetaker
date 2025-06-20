@@ -283,7 +283,7 @@ Handle API limits by splitting large files
 
 ### OpenAI APIs
 - **Whisper API**: Audio transcription
-  - Model: `whisper-1`
+  - Model: `gpt-4o-transcribe`
   - Format: `verbose_json`
 - **GPT-3.5**: Transcript cleaning
 - **GPT-4**: Content structuring
@@ -295,10 +295,20 @@ Handle API limits by splitting large files
 3. **Document Sharing**: Public by default (configurable)
 4. **No Database**: No persistent storage of sensitive data
 
-## Future Architecture Considerations
+## Setup and Deployment Considerations
 
-- Database integration for session metadata
-- Web interface for easier access
-- Real-time processing capabilities
-- Multi-user support
-- Enhanced error recovery
+### Package Installation
+When setup instructions change (e.g., new dependencies, package structure), the following locations must be updated:
+
+1. **GitHub Actions Workflow** (`.github/workflows/tests.yml`):
+   - Must include `pip install -e .` to install package in editable mode
+   - Required for tests that run the package as a module (`python -m dnd_notetaker`)
+   
+2. **Documentation Files**:
+   - `README.md`: User installation instructions
+   - `quickstart.sh`: Quick setup script
+   - `Dockerfile`: Container setup instructions
+   
+3. **Package Configuration**:
+   - `setup.py`: Package dependencies and entry points
+   - `requirements.txt`: Direct dependencies

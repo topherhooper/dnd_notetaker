@@ -149,7 +149,7 @@ python -m dnd_notetaker FILE_ID --dry-run
   Output: /path/to/output/audio.mp3
 [DRY RUN] Would transcribe audio using OpenAI Whisper:
   Audio file: /path/to/output/audio.mp3
-  Model: whisper-1
+  Model: gpt-4o-transcribe
   Estimated cost: ~$0.006 per minute
 [DRY RUN] Would generate notes using OpenAI GPT:
   Model: o4-mini
