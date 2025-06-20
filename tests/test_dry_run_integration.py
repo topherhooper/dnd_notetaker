@@ -106,34 +106,34 @@ class TestDryRunIntegration:
         # Directory should not be created
         assert not custom_dir.exists()
     
-    @patch('dnd_notetaker.meet_processor.MeetProcessor')
-    def test_dry_run_component_interactions(self, mock_processor_class):
+    def test_dry_run_component_interactions(self):
         """Test that all components receive dry_run config"""
         from dnd_notetaker.meet_notes import main
         from dnd_notetaker.config import Config
         
-        # Mock the processor
-        mock_processor = Mock()
-        mock_processor_class.return_value = mock_processor
-        
-        # Run with dry-run
-        test_args = ['dnd_notetaker', 'FILE_ID', '--dry-run']
-        with patch.object(sys, 'argv', test_args):
-            with patch('dnd_notetaker.meet_notes.Config') as mock_config_class:
-                mock_config = Mock()
-                mock_config.dry_run = True
-                mock_config.output_dir = Path("/tmp/output")
-                mock_config_class.return_value = mock_config
-                
-                try:
-                    main()
-                except SystemExit:
-                    pass
-                
-                # Verify config was created with dry_run=True
-                mock_config_class.assert_called_with(config_path=None, dry_run=True)
-                
-                # Verify processor was created with the config
-                assert mock_processor_class.called
-                args, kwargs = mock_processor_class.call_args
-                assert args[0] == mock_config  # First arg should be config
+        with patch('dnd_notetaker.meet_notes.MeetProcessor') as mock_processor_class:
+            # Mock the processor
+            mock_processor = Mock()
+            mock_processor_class.return_value = mock_processor
+            
+            # Run with dry-run
+            test_args = ['dnd_notetaker', 'FILE_ID', '--dry-run']
+            with patch.object(sys, 'argv', test_args):
+                with patch('dnd_notetaker.meet_notes.Config') as mock_config_class:
+                    mock_config = Mock()
+                    mock_config.dry_run = True
+                    mock_config.output_dir = Path("/tmp/output")
+                    mock_config_class.return_value = mock_config
+                    
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+                    
+                    # Verify config was created with dry_run=True
+                    mock_config_class.assert_called_with(config_path=None, dry_run=True)
+                    
+                    # Verify processor was created with the config
+                    assert mock_processor_class.called
+                    args, kwargs = mock_processor_class.call_args
+                    assert args[0] == mock_config  # First arg should be config

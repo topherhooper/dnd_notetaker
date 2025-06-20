@@ -60,6 +60,9 @@ class AudioProcessor:
         # Extract audio with progress bar
         video = VideoFileClip(video_path)
         duration = video.duration
+        
+        if video.audio is None:
+            raise ValueError(f"Video file has no audio track: {video_path}")
 
         with tqdm(total=100, desc="Extracting audio") as pbar:
 
@@ -130,6 +133,7 @@ class AudioProcessor:
             self.verify_audio_file(audio_path)
 
             # Try to get file size first
+            file_size = 0  # Default value
             try:
                 file_size = os.path.getsize(audio_path)
                 self.logger.debug(f"Audio file size: {file_size/1024/1024:.1f}MB")

@@ -98,6 +98,9 @@ IMPORTANT REQUIREMENTS:
 
 Write the summary as a cohesive narrative that captures the essence of the meeting."""
         
+        if not self.client:
+            raise RuntimeError("OpenAI client not initialized (check dry_run mode)")
+            
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -108,7 +111,7 @@ Write the summary as a cohesive narrative that captures the essence of the meeti
             max_tokens=2000
         )
         
-        return response.choices[0].message.content.strip()
+        return response.choices[0].message.content.strip() if response.choices[0].message.content else ""
             
     
     def _generate_chunk_summary(self, chunk: str, chunk_num: int, total_chunks: int) -> str:
@@ -119,6 +122,9 @@ Write a flowing narrative summary of this portion of the meeting.
 IMPORTANT: Write in continuous prose paragraphs with no bullet points or headers.
 Focus on the key discussions, decisions, and action items in this segment."""
         
+        if not self.client:
+            raise RuntimeError("OpenAI client not initialized (check dry_run mode)")
+            
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -129,7 +135,7 @@ Focus on the key discussions, decisions, and action items in this segment."""
             max_tokens=1000
         )
         
-        return response.choices[0].message.content.strip()
+        return response.choices[0].message.content.strip() if response.choices[0].message.content else ""
     
     def _combine_summaries(self, summaries: List[str]) -> str:
         """Combine multiple chunk summaries into cohesive notes"""
@@ -145,6 +151,9 @@ IMPORTANT:
 - Ensure smooth transitions between topics
 - Keep all important decisions and action items"""
         
+        if not self.client:
+            raise RuntimeError("OpenAI client not initialized (check dry_run mode)")
+            
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -155,4 +164,4 @@ IMPORTANT:
             max_tokens=3000
         )
         
-        return response.choices[0].message.content.strip()
+        return response.choices[0].message.content.strip() if response.choices[0].message.content else ""

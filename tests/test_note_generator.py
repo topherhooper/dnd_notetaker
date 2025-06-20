@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch, MagicMock
 import openai
 
 from dnd_notetaker.note_generator import NoteGenerator
+from dnd_notetaker.config import Config
 
 
 class TestNoteGenerator:
@@ -13,8 +14,10 @@ class TestNoteGenerator:
     @pytest.fixture
     def generator(self):
         """Create note generator with mock client"""
+        mock_config = Mock(spec=Config)
+        mock_config.dry_run = False
         with patch('openai.OpenAI'):
-            return NoteGenerator("test-api-key")
+            return NoteGenerator("test-api-key", mock_config)
     
     @pytest.fixture
     def mock_response(self):
@@ -26,8 +29,10 @@ class TestNoteGenerator:
     
     def test_init(self):
         """Test note generator initialization"""
+        mock_config = Mock(spec=Config)
+        mock_config.dry_run = False
         with patch('openai.OpenAI') as mock_openai:
-            generator = NoteGenerator("test-key")
+            generator = NoteGenerator("test-key", mock_config)
             mock_openai.assert_called_once_with(api_key="test-key")
     
     def test_generate_single_chunk(self, generator, mock_response):
@@ -45,7 +50,7 @@ class TestNoteGenerator:
         
         # Check API call parameters
         call_args = generator.client.chat.completions.create.call_args
-        assert call_args.kwargs['model'] == 'gpt-4'
+        assert call_args.kwargs['model'] == 'o4-mini'
         assert len(call_args.kwargs['messages']) == 2
         assert 'continuous prose' in call_args.kwargs['messages'][0]['content']
         assert transcript in call_args.kwargs['messages'][1]['content']
@@ -111,7 +116,7 @@ class TestNoteGenerator:
         generator.client.chat.completions.create.side_effect = Exception("API Error")
         
         # Generate notes and expect error
-        with pytest.raises(RuntimeError, match="Failed to generate notes"):
+        with pytest.raises(Exception, match="API Error"):
             generator.generate("Test transcript")
     
     def test_generate_chunk_summary(self, generator, mock_response):

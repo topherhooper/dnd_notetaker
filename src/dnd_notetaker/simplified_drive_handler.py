@@ -45,6 +45,9 @@ class SimplifiedDriveHandler:
             return output_path
             
         try:
+            if not self.service:
+                raise RuntimeError("Drive service not initialized (check dry_run mode)")
+                
             # Get file metadata
             file_metadata = self.service.files().get(
                 fileId=file_id,
@@ -66,6 +69,9 @@ class SimplifiedDriveHandler:
             output_path = output_dir / safe_filename
             logger.info(f"Downloading: {filename} ({self._format_size(file_size)})")
             
+            if not self.service:
+                raise RuntimeError("Drive service not initialized")
+                
             request = self.service.files().get_media(fileId=file_id)
             
             # Stream directly to file instead of memory
@@ -106,6 +112,9 @@ class SimplifiedDriveHandler:
             # Look for files with "Meet" in name or video mime type
             query = "(name contains 'Meet' or mimeType contains 'video/') and trashed = false"
             
+            if not self.service:
+                raise RuntimeError("Drive service not initialized (check dry_run mode)")
+                
             results = self.service.files().list(
                 q=query,
                 spaces='drive',
@@ -154,8 +163,9 @@ class SimplifiedDriveHandler:
     
     def _format_size(self, size_bytes: int) -> str:
         """Format file size for display"""
+        size = float(size_bytes)
         for unit in ['B', 'KB', 'MB', 'GB']:
-            if size_bytes < 1024.0:
-                return f"{size_bytes:.1f} {unit}"
-            size_bytes /= 1024.0
-        return f"{size_bytes:.1f} TB"
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"

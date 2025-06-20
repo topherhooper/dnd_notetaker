@@ -61,6 +61,9 @@ class Transcriber:
                             f"Transcribing chunk {i+1}/{len(chunk_paths)}"
                         )
                     with open(chunk_path, "rb") as audio_file:
+                        if not self.client:
+                            raise RuntimeError("OpenAI client not initialized (check dry_run mode)")
+                            
                         chunk_transcript = self.client.audio.transcriptions.create(
                             model="whisper-1", file=audio_file, response_format="text"
                         )
@@ -77,8 +80,9 @@ class Transcriber:
             self.logger.debug(f"Total transcript length: {len(transcript)} characters")
 
             # Save transcript if output directory provided
-            filepath = save_text_output(transcript, "full_transcript", output_dir)
-            return transcript, filepath
+            if self.output_dir:
+                filepath = save_text_output(transcript, "full_transcript", self.output_dir)
+                return transcript, filepath
 
             return transcript, None
 

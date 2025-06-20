@@ -64,6 +64,9 @@ class DriveHandler:
             # Query for all video files in the folder
             query = f"'{folder_id}' in parents and mimeType contains 'video/'"
             
+            if not self.drive_service:
+                raise RuntimeError("Drive service not initialized")
+                
             results = self.drive_service.files().list(
                 q=query,
                 fields="files(id, name, size, mimeType, createdTime, modifiedTime)",
@@ -96,6 +99,9 @@ class DriveHandler:
             self.setup_drive_service()
 
         try:
+            if not self.drive_service:
+                raise RuntimeError("Drive service not initialized")
+                
             # Get file metadata with additional fields
             file_metadata = (
                 self.drive_service.files()
@@ -149,6 +155,9 @@ class DriveHandler:
             os.makedirs(download_dir, exist_ok=True)
 
             # Download file directly to disk
+            if not self.drive_service:
+                raise RuntimeError("Drive service not initialized")
+                
             request = self.drive_service.files().get_media(fileId=file_id)
 
             # Open file for writing

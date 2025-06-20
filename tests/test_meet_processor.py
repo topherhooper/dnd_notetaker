@@ -17,6 +17,7 @@ class TestMeetProcessor:
         config = Mock()
         config.service_account_path = Path("/path/to/service.json")
         config.openai_api_key = "test-key"
+        config.dry_run = False
         return config
     
     @pytest.fixture
@@ -36,11 +37,11 @@ class TestMeetProcessor:
         processor = MeetProcessor(mock_config, temp_output_dir)
         
         # Verify components were initialized
-        mock_drive.assert_called_once_with(mock_config.service_account_path)
-        mock_audio.assert_called_once()
-        mock_trans.assert_called_once_with(mock_config.openai_api_key)
-        mock_notes.assert_called_once_with(mock_config.openai_api_key)
-        mock_artifacts.assert_called_once_with(temp_output_dir)
+        mock_drive.assert_called_once_with(mock_config.service_account_path, mock_config)
+        mock_audio.assert_called_once_with(mock_config)
+        mock_trans.assert_called_once_with(mock_config.openai_api_key, mock_config)
+        mock_notes.assert_called_once_with(mock_config.openai_api_key, mock_config)
+        mock_artifacts.assert_called_once_with(temp_output_dir, mock_config)
     
     @patch('dnd_notetaker.meet_processor.SimplifiedDriveHandler')
     @patch('dnd_notetaker.meet_processor.AudioExtractor')
