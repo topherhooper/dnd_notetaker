@@ -92,24 +92,26 @@ class TestAudioExtractor:
             extractor.extract(video_path, audio_path)
     
     @patch('subprocess.run')
-    def test_extract_output_not_created(self, mock_run, extractor, temp_files):
+    def test_extract_output_not_created(self, mock_run, extractor):
         """Test error when output file is not created"""
-        video_path, audio_path = temp_files
-        
-        # Mock successful ffmpeg run but no output file
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="",
-            stderr=""
-        )
-        
-        # Ensure output file doesn't exist
-        if audio_path.exists():
-            audio_path.unlink()
-        
-        # Run extraction and expect error
-        with pytest.raises(RuntimeError, match="output file not created"):
-            extractor.extract(video_path, audio_path)
+        # Create temporary paths that don't use context managers
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video_path = Path(temp_dir) / "video.mp4"
+            audio_path = Path(temp_dir) / "audio.mp3"
+            
+            # Create the video file
+            video_path.write_text("fake video")
+            
+            # Mock successful ffmpeg run but no output file
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="",
+                stderr=""
+            )
+            
+            # Run extraction and expect error
+            with pytest.raises(RuntimeError, match="output file not created"):
+                extractor.extract(video_path, audio_path)
     
     @patch('subprocess.run')
     @patch('pathlib.Path.mkdir')
