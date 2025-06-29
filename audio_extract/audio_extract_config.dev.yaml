@@ -1,0 +1,75 @@
+# Development Configuration for audio_extract
+# Usage: python -m audio_extract.monitor --config audio_extract_config.yaml.dev
+
+# Environment identifier
+environment: development
+
+google_drive:
+  # Path to service account JSON file
+  # Can also be set via GOOGLE_APPLICATION_CREDENTIALS env var
+  service_account_file: /workspaces/dnd_notetaker/.credentials/service_account.json
+  
+  # Google Drive folder ID to monitor for Meet recordings
+  # Get this from the folder URL: https://drive.google.com/drive/folders/FOLDER_ID
+  recordings_folder_id: "14EVI64FlpZCwRy4UL4ZhGjlsjK55XL1h"
+  
+  # How often to check for new recordings (in seconds)
+  check_interval_seconds: 10  # 1 minute for faster dev feedback
+  
+  # How many days back to look for recordings
+  days_to_look_back: 2  # Less history in dev
+  
+  # Temporary directory for downloading videos (optional)
+  # If not specified, uses output_directory/.temp
+  download_temp_dir: /tmp/audio_extract_dev
+
+processing:
+  # Directory where extracted audio files will be saved
+  output_directory: ./output/dev
+  
+  # Whether to delete the video file after extracting audio
+  delete_video_after_processing: false  # Keep files in dev for debugging
+  
+  # Audio extraction settings
+  audio_format:
+    bitrate: 128k
+    sample_rate: 44100
+    channels: 1  # 1 = mono, 2 = stereo
+    
+  # Max file size to process (in MB)
+  max_file_size_mb: 500  # Smaller limit for dev
+  
+  # Number of parallel downloads
+  max_parallel_downloads: 1  # Sequential in dev
+
+monitoring:
+  # Enable the web dashboard
+  enable_dashboard: true  # YES - you want this in dev
+  
+  # Port for the web dashboard
+  dashboard_port: 8080
+  dashboard_open_browser: true  # Auto-open browser on start
+  
+  # Logging configuration
+  log_level: DEBUG  # Verbose in dev
+  log_to_console: true
+  log_file: ./logs/dev/audio-extract.log
+  
+  # Path to the SQLite database for tracking processed files
+  database_path: ./data/dev/processed.db
+  
+# Runtime behavior
+behavior:
+  # Run mode: 'foreground' or 'background'
+  run_mode: foreground  # See output in dev
+  
+  # Retry configuration
+  retry_failed_files: false  # Don't retry in dev
+  retry_attempts: 0
+  
+  # Error handling
+  stop_on_error: true  # EXIT on error in dev - you want to see failures
+  show_full_traceback: true  # Show complete error details
+  
+  # Performance
+  download_chunk_size_mb: 10  # Smaller chunks in dev

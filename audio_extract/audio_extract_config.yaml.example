@@ -1,0 +1,47 @@
+# Example configuration file for audio_extract module
+# Copy this to audio_extract_config.yaml and update with your values
+
+google_drive:
+  # Path to service account JSON file
+  # Can also be set via GOOGLE_APPLICATION_CREDENTIALS env var
+  service_account_file: /path/to/service_account.json
+  
+  # Google Drive folder ID to monitor for Meet recordings
+  # Get this from the folder URL: https://drive.google.com/drive/folders/FOLDER_ID
+  recordings_folder_id: "your-folder-id-here"
+  
+  # How often to check for new recordings (in seconds)
+  check_interval_seconds: 300  # 5 minutes
+  
+  # How many days back to look for recordings
+  days_to_look_back: 7
+  
+  # Temporary directory for downloading videos (optional)
+  # If not specified, uses output_directory/.temp
+  download_temp_dir: null
+
+processing:
+  # Directory where extracted audio files will be saved
+  output_directory: ./audio_output
+  
+  # Whether to delete the video file after extracting audio
+  delete_video_after_processing: true
+  
+  # Audio extraction settings
+  audio_format:
+    bitrate: 128k
+    sample_rate: 44100
+    channels: 1  # 1 = mono, 2 = stereo
+
+monitoring:
+  # Enable the web dashboard
+  enable_dashboard: true
+  
+  # Port for the web dashboard
+  dashboard_port: 8080
+  
+  # Logging level (DEBUG, INFO, WARNING, ERROR)
+  log_level: INFO
+  
+  # Path to the SQLite database for tracking processed files
+  database_path: processed_files.db
