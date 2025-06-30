@@ -630,6 +630,75 @@ Added health status information and shareable GCS URLs to the audio extraction d
 5. **Security**: No credential leaks or unauthorized access
 6. **Scalability**: Handle 100+ files per hour without degradation
 
+## GitHub Actions and GCSfuse Integration (COMPLETED)
+
+### Overview
+Implemented comprehensive GitHub Actions workflows for CI/CD and updated the deployment to use GCSfuse for transparent cloud storage.
+
+### Completed Features
+
+1. **GitHub Actions Workflows** ✅
+   - **Test Workflow**: Enhanced to include audio_extract specific tests
+   - **Build Workflow**: Builds and pushes Docker images to GitHub Container Registry
+   - **Deploy Workflow**: Automated deployment to staging and production with health checks
+   - **Release Workflow**: Version management with changelog generation
+
+2. **GCSfuse Docker Integration** ✅
+   - Updated Dockerfile with gcsfuse installation and FUSE support
+   - Created docker-entrypoint.sh for automatic GCS bucket mounting
+   - Added proper signal handling with tini
+   - Supports both root and non-root user execution
+
+3. **Configuration Updates** ✅
+   - Updated dev/prod/staging configs for GCSfuse paths
+   - Added fallback paths for non-containerized deployments
+   - Environment variable substitution for sensitive values
+   - GCS mount options optimized for each environment
+
+4. **Docker Compose Enhancements** ✅
+   - Added privileged mode and FUSE device access
+   - Environment-specific compose files (dev, staging, prod)
+   - Health checks integrated
+   - Resource limits defined
+
+### Benefits of GCSfuse Approach
+
+1. **Zero Code Changes**: Application writes to "local" filesystem that's actually GCS
+2. **Automatic Sync**: Files appear in GCS immediately
+3. **Cost Effective**: No API calls for uploads, only storage costs
+4. **Simple Development**: Same code path for local and cloud storage
+5. **Easy Recovery**: Files persist in GCS even if container crashes
+
+### Deployment Process
+
+1. **Development**:
+   ```bash
+   # Without GCS
+   docker-compose up
+   
+   # With GCS
+   ENABLE_GCSFUSE=true GCS_BUCKET_NAME=my-bucket docker-compose up
+   ```
+
+2. **Staging/Production**:
+   - Push code to main branch
+   - GitHub Actions builds and pushes Docker image
+   - Deploy workflow automatically deploys to staging
+   - Manual approval required for production
+   - Health checks verify deployment
+
+### Storage Structure in GCS
+
+```
+audio-extracts-bucket/
+├── dev/
+│   └── 2025/01/meeting_audio.mp3
+├── staging/
+│   └── 2025/01/meeting_audio.mp3
+└── prod/
+    └── 2025/01/meeting_audio.mp3
+```
+
 ## Next Steps for Production
 
 1. **GCS Setup**

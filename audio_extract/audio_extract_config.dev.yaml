@@ -77,17 +77,26 @@ behavior:
 # Storage configuration
 storage:
   # Storage type: 'local' or 'gcs'
-  type: local  # Use local storage in dev
+  # When using gcsfuse, keep this as 'local' since gcsfuse makes GCS appear as local filesystem
+  type: local
   
   # Local storage settings
   local:
-    path: ./output/dev
+    # This path is used when gcsfuse is enabled in Docker
+    # The entrypoint script will mount GCS bucket here
+    path: /mnt/audio-extracts/dev
+    # Fallback path when running without Docker/gcsfuse
+    fallback_path: ./output/dev
     
-  # GCS storage settings (not used in dev, but shown for reference)
-  # To use GCS in dev:
-  # 1. Change type to 'gcs'
-  # 2. Mount bucket with gcsfuse: gcsfuse my-bucket ~/audio-extracts-mount
-  # 3. Set local.path to mount point: ~/audio-extracts-mount/dev
+  # GCS mount configuration (used by docker-entrypoint.sh)
+  gcs_mount:
+    enabled: ${ENABLE_GCSFUSE:-false}  # Set via environment variable
+    bucket_name: ${GCS_BUCKET_NAME:-your-audio-extracts-dev}
+    mount_point: /mnt/audio-extracts
+    mount_options: "--implicit-dirs --dir-mode=755 --file-mode=644"
+    
+  # Direct GCS API settings (alternative to gcsfuse, not recommended)
+  # Kept for backward compatibility
   gcs:
     bucket_name: your-audio-extracts-dev
     credentials_path: /path/to/gcs-service-account.json

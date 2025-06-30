@@ -1,0 +1,250 @@
+name: Deploy Audio Extract
+
+on:
+  workflow_run:
+    workflows: ["Build Audio Extract"]
+    types:
+      - completed
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: false
+        default: 'latest'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/audio-extract
+
+jobs:
+  deploy-staging:
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging' ||
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set image tag
+      id: set-tag
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Deploy to staging
+      env:
+        DEPLOY_HOST: ${{ secrets.STAGING_HOST }}
+        DEPLOY_USER: ${{ secrets.STAGING_USER }}
+        DEPLOY_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        IMAGE_TAG: ${{ steps.set-tag.outputs.tag }}
+      run: |
+        # Setup SSH
+        mkdir -p ~/.ssh
+        echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+        
+        # Deploy script
+        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          set -e
+          cd /opt/audio-extract
+          
+          # Pull latest config
+          git pull origin main
+          
+          # Update image tag in docker-compose
+          export AUDIO_EXTRACT_TAG=${{ env.IMAGE_TAG }}
+          export REGISTRY=${{ env.REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          
+          # Pull new image
+          docker-compose -f docker-compose.staging.yml pull
+          
+          # Deploy with zero downtime
+          docker-compose -f docker-compose.staging.yml up -d --no-deps --scale audio-extract=2 audio-extract
+          sleep 30
+          docker-compose -f docker-compose.staging.yml up -d --no-deps --remove-orphans audio-extract
+          
+          # Health check
+          sleep 10
+          curl -f http://localhost:8081/health || exit 1
+          
+          echo "Staging deployment successful!"
+        EOF
+    
+    - name: Run smoke tests
+      env:
+        STAGING_URL: ${{ secrets.STAGING_URL }}
+      run: |
+        # Basic health check
+        curl -f $STAGING_URL/health
+        
+        # Check specific endpoints
+        curl -f $STAGING_URL/api/stats
+        
+        echo "Smoke tests passed!"
+    
+    - name: Notify deployment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 Deployed to **staging** environment!\n\nImage: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}`'
+          })
+
+  deploy-production:
+    needs: deploy-staging
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' ||
+      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set image tag
+      id: set-tag
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Pre-deployment checks
+      run: |
+        echo "Running pre-deployment checks..."
+        # Add any pre-deployment validation here
+        # e.g., database migrations, config validation, etc.
+    
+    - name: Deploy to production
+      env:
+        DEPLOY_HOST: ${{ secrets.PRODUCTION_HOST }}
+        DEPLOY_USER: ${{ secrets.PRODUCTION_USER }}
+        DEPLOY_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        IMAGE_TAG: ${{ steps.set-tag.outputs.tag }}
+        GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+        AUDIO_EXTRACT_FOLDER_ID: ${{ secrets.AUDIO_EXTRACT_FOLDER_ID }}
+      run: |
+        # Setup SSH
+        mkdir -p ~/.ssh
+        echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+        
+        # Deploy script
+        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+          set -e
+          cd /opt/audio-extract
+          
+          # Backup current config
+          cp docker-compose.prod.yml docker-compose.prod.yml.backup
+          
+          # Pull latest config
+          git pull origin main
+          
+          # Set environment variables
+          export AUDIO_EXTRACT_TAG=${{ env.IMAGE_TAG }}
+          export REGISTRY=${{ env.REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          export GCS_BUCKET_NAME=${{ env.GCS_BUCKET_NAME }}
+          export AUDIO_EXTRACT_FOLDER_ID=${{ env.AUDIO_EXTRACT_FOLDER_ID }}
+          
+          # Pull new image
+          docker-compose -f docker-compose.prod.yml pull
+          
+          # Deploy with rolling update
+          docker-compose -f docker-compose.prod.yml up -d --no-deps --scale audio-extract=2 audio-extract
+          
+          # Wait for new container to be healthy
+          sleep 60
+          
+          # Remove old containers
+          docker-compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans audio-extract
+          
+          # Verify deployment
+          sleep 10
+          if ! curl -f http://localhost:8081/health; then
+            echo "Health check failed! Rolling back..."
+            cp docker-compose.prod.yml.backup docker-compose.prod.yml
+            docker-compose -f docker-compose.prod.yml up -d
+            exit 1
+          fi
+          
+          # Clean up old images
+          docker image prune -f
+          
+          echo "Production deployment successful!"
+        EOF
+    
+    - name: Post-deployment verification
+      env:
+        PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+      run: |
+        # Comprehensive health checks
+        curl -f $PRODUCTION_URL/health
+        
+        # Verify all components
+        health_response=$(curl -s $PRODUCTION_URL/health)
+        echo "Health check response: $health_response"
+        
+        # Check if GCSfuse is mounted
+        if [[ $(echo $health_response | jq -r '.components.storage.status') != "healthy" ]]; then
+          echo "Storage component is not healthy!"
+          exit 1
+        fi
+        
+        echo "All post-deployment checks passed!"
+    
+    - name: Create deployment record
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const deployment = await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'production',
+            required_contexts: [],
+            auto_merge: false
+          });
+          
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: deployment.data.id,
+            state: 'success',
+            environment_url: '${{ secrets.PRODUCTION_URL }}',
+            description: 'Deployment successful'
+          });
+    
+    - name: Notify deployment
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ job.status }}
+        text: |
+          Audio Extract deployed to production!
+          Version: ${{ steps.set-tag.outputs.tag }}
+          Status: ${{ job.status }}
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

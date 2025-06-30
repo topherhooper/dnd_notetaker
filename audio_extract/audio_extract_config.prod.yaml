@@ -94,15 +94,29 @@ behavior:
 # Storage configuration  
 storage:
   # Storage type: 'local' or 'gcs'
-  type: gcs  # Use GCS in production
+  # In production with gcsfuse, use 'local' type since GCS appears as filesystem
+  type: local
   
-  # Local storage settings (fallback)
+  # Local storage settings
   local:
-    path: /var/audio_extract/output
+    # When using gcsfuse, this points to the mounted GCS bucket
+    path: /mnt/audio-extracts/prod
+    # Fallback for non-containerized deployments
+    fallback_path: /var/audio_extract/output
     
-  # GCS storage settings
+  # GCS mount configuration (used by docker-entrypoint.sh)
+  gcs_mount:
+    enabled: true  # Always use GCS in production
+    bucket_name: "${GCS_BUCKET_NAME}"  # From environment
+    mount_point: /mnt/audio-extracts
+    mount_options: "--implicit-dirs --dir-mode=755 --file-mode=644 --stat-cache-ttl=10m --type-cache-ttl=10m"
+    # Production optimizations:
+    # - stat-cache-ttl: Cache file metadata for 10 minutes
+    # - type-cache-ttl: Cache file type info for 10 minutes
+    
+  # Direct GCS API settings (fallback if gcsfuse fails)
   gcs:
     bucket_name: "${GCS_BUCKET_NAME}"  # From environment
-    credentials_path: "${GCS_CREDENTIALS_PATH}"  # From environment
+    credentials_path: "${GCS_CREDENTIALS_PATH:-/etc/audio-extract/gcs-credentials.json}"
     public_access: false  # Use signed URLs for security
     url_expiration_hours: 168  # 1 week
