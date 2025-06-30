@@ -16,6 +16,32 @@
             </div>
         </header>
         
+        <div class="health-status" id="health-section">
+            <h2>System Health</h2>
+            <div class="health-grid" id="health-grid">
+                <div class="health-item">
+                    <span class="health-icon" id="health-ffmpeg">⚪</span>
+                    <span class="health-label">FFmpeg</span>
+                    <span class="health-message" id="health-ffmpeg-msg">Checking...</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-icon" id="health-database">⚪</span>
+                    <span class="health-label">Database</span>
+                    <span class="health-message" id="health-database-msg">Checking...</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-icon" id="health-storage">⚪</span>
+                    <span class="health-label">Storage</span>
+                    <span class="health-message" id="health-storage-msg">Checking...</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-icon" id="health-temp_storage">⚪</span>
+                    <span class="health-label">Temp Storage</span>
+                    <span class="health-message" id="health-temp_storage-msg">Checking...</span>
+                </div>
+            </div>
+        </div>
+        
         <div class="stats-grid">
             <div class="stat-card">
                 <h3>Total Processed</h3>
@@ -48,12 +74,13 @@
                             <th>Status</th>
                             <th>Processed</th>
                             <th>Duration</th>
+                            <th>Audio Link</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="recent-tbody">
                         <tr>
-                            <td colspan="5" class="loading">Loading...</td>
+                            <td colspan="6" class="loading">Loading...</td>
                         </tr>
                     </tbody>
                 </table>

@@ -90,3 +90,19 @@ behavior:
   # Cleanup
   cleanup_old_records_days: 90  # Clean records older than 90 days
   cleanup_schedule: "0 2 * * *"  # Run at 2 AM daily
+
+# Storage configuration  
+storage:
+  # Storage type: 'local' or 'gcs'
+  type: gcs  # Use GCS in production
+  
+  # Local storage settings (fallback)
+  local:
+    path: /var/audio_extract/output
+    
+  # GCS storage settings
+  gcs:
+    bucket_name: "${GCS_BUCKET_NAME}"  # From environment
+    credentials_path: "${GCS_CREDENTIALS_PATH}"  # From environment
+    public_access: false  # Use signed URLs for security
+    url_expiration_hours: 168  # 1 week

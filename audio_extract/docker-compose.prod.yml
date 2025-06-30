@@ -1,0 +1,66 @@
+# Production Docker Compose configuration
+version: '3.8'
+
+services:
+  audio-extract:
+    build: .
+    container_name: audio-extract-prod
+    volumes:
+      # Configuration files
+      - ./configs:/app/configs:ro
+      - audio-data:/app/data
+      - audio-logs:/app/logs
+      # For local storage mode
+      - audio-output:/app/output
+      # Google credentials - mount from host
+      - /etc/audio-extract/credentials.json:/app/credentials/service-account.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      - PYTHONUNBUFFERED=1
+      # Production environment
+      - ENVIRONMENT=production
+    ports:
+      - "127.0.0.1:8080:8080"  # Dashboard - localhost only
+      - "127.0.0.1:8081:8081"  # Health check - localhost only
+    restart: always
+    command: ["--config", "/app/configs/audio_extract_config.prod.yaml", "--no-dashboard"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: audio-extract-nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - audio-extract
+    restart: always
+
+volumes:
+  audio-data:
+    driver: local
+  audio-logs:
+    driver: local
+  audio-output:
+    driver: local

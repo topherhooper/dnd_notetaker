@@ -30,6 +30,14 @@ async function loadDashboard() {
     try {
         updateConnectionStatus(true);
         
+        // Load health status
+        try {
+            const health = await fetchAPI('/health');
+            updateHealthStatus(health);
+        } catch (error) {
+            console.error('Failed to load health status:', error);
+        }
+        
         // Load statistics
         const stats = await fetchAPI('/stats');
         updateStatistics(stats);
@@ -66,29 +74,69 @@ function updateStatistics(stats) {
     document.getElementById('stat-success-rate').textContent = `${stats.success_rate || 0}%`;
 }
 
+// Update health status
+function updateHealthStatus(health) {
+    const statusIcons = {
+        'healthy': '🟢',
+        'unhealthy': '🔴',
+        'warning': '🟡',
+        'unknown': '⚪'
+    };
+    
+    // Update each component
+    for (const [component, info] of Object.entries(health.components || {})) {
+        const icon = document.getElementById(`health-${component}`);
+        const msg = document.getElementById(`health-${component}-msg`);
+        
+        if (icon && msg) {
+            icon.textContent = statusIcons[info.status] || statusIcons['unknown'];
+            msg.textContent = info.message || 'Unknown';
+        }
+    }
+}
+
 // Update recent videos table
 function updateRecentTable(videos) {
     const tbody = document.getElementById('recent-tbody');
     
     if (videos.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="loading">No recent videos</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="loading">No recent videos</td></tr>';
         return;
     }
     
-    tbody.innerHTML = videos.map(video => `
-        <tr>
-            <td title="${escapeHtml(video.file_path)}">${truncatePath(video.file_path)}</td>
-            <td><span class="status-badge ${video.status}">${video.status}</span></td>
-            <td>${formatDate(video.processed_at)}</td>
-            <td>${video.metadata?.duration ? formatDuration(video.metadata.duration) : '-'}</td>
-            <td>
-                ${video.status === 'failed' ? 
-                    `<button class="btn btn-sm btn-primary" onclick="reprocessVideo('${escapeHtml(video.file_path)}')">Retry</button>` :
-                    '-'
-                }
-            </td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = videos.map(video => {
+        // Generate audio link HTML
+        let audioLinkHtml = '-';
+        if (video.storage_url && video.status === 'completed') {
+            const fileName = video.storage_path ? video.storage_path.split('/').pop() : 'audio.mp3';
+            audioLinkHtml = `
+                <div class="audio-link">
+                    <a href="${escapeHtml(video.storage_url)}" target="_blank" title="Download ${fileName}">
+                        📥 ${truncateText(fileName, 20)}
+                    </a>
+                    <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(video.storage_url)}', this)" title="Copy URL">
+                        📋
+                    </button>
+                </div>
+            `;
+        }
+        
+        return `
+            <tr>
+                <td title="${escapeHtml(video.file_path)}">${truncatePath(video.file_path)}</td>
+                <td><span class="status-badge ${video.status}">${video.status}</span></td>
+                <td>${formatDate(video.processed_at)}</td>
+                <td>${video.metadata?.duration ? formatDuration(video.metadata.duration) : '-'}</td>
+                <td>${audioLinkHtml}</td>
+                <td>
+                    ${video.status === 'failed' ? 
+                        `<button class="btn btn-sm btn-primary" onclick="reprocessVideo('${escapeHtml(video.file_path)}')">Retry</button>` :
+                        '-'
+                    }
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 // Update failed videos table
@@ -239,4 +287,45 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Copy URL to clipboard
+async function copyToClipboard(url, button) {
+    try {
+        await navigator.clipboard.writeText(url);
+        
+        // Visual feedback
+        button.classList.add('copied');
+        button.textContent = '✓';
+        
+        setTimeout(() => {
+            button.classList.remove('copied');
+            button.textContent = '📋';
+        }, 2000);
+    } catch (error) {
+        console.error('Failed to copy:', error);
+        alert('Failed to copy URL to clipboard');
+    }
+}
+
+// Refresh expired URL
+async function refreshURL(storagePath, linkElement) {
+    try {
+        const response = await fetch(`${API_BASE}/refresh-url`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({storage_path: storagePath})
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            linkElement.href = result.url;
+            return result.url;
+        } else {
+            throw new Error('Failed to refresh URL');
+        }
+    } catch (error) {
+        console.error('Failed to refresh URL:', error);
+        alert('Failed to refresh URL: ' + error.message);
+    }
 }

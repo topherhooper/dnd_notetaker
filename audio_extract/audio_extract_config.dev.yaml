@@ -73,3 +73,23 @@ behavior:
   
   # Performance
   download_chunk_size_mb: 10  # Smaller chunks in dev
+
+# Storage configuration
+storage:
+  # Storage type: 'local' or 'gcs'
+  type: local  # Use local storage in dev
+  
+  # Local storage settings
+  local:
+    path: ./output/dev
+    
+  # GCS storage settings (not used in dev, but shown for reference)
+  # To use GCS in dev:
+  # 1. Change type to 'gcs'
+  # 2. Mount bucket with gcsfuse: gcsfuse my-bucket ~/audio-extracts-mount
+  # 3. Set local.path to mount point: ~/audio-extracts-mount/dev
+  gcs:
+    bucket_name: your-audio-extracts-dev
+    credentials_path: /path/to/gcs-service-account.json
+    public_access: false
+    url_expiration_hours: 24

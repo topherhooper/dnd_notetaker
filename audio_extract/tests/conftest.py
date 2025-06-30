@@ -22,8 +22,9 @@ def temp_dir():
 @pytest.fixture
 def mock_config():
     """Create a mock configuration object."""
+
     class Config:
         def __init__(self):
             self.dry_run = False
-    
+
     return Config()

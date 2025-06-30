@@ -7,9 +7,11 @@ A standalone audio extraction service that monitors Google Drive for new Meet re
 - **Google Drive monitoring** - Continuously monitor Drive folders for new Meet recordings
 - **FFmpeg-based extraction** - Reliable audio extraction from video files
 - **Processing tracker** - SQLite database tracks all processed files
+- **Storage abstraction** - Support for local and Google Cloud Storage
 - **Config-driven behavior** - Dev and prod configs control everything
 - **Web dashboard** (dev only) - Real-time monitoring at http://localhost:8080
-- **Email notifications** (prod only) - Get notified when processing fails
+- **Health check endpoints** - Production-ready monitoring at /health, /ready, /live
+- **Docker support** - Easy deployment with Docker and docker-compose
 - **No error hiding** - All errors propagate with full stack traces for debugging
 
 ## Project Structure
@@ -43,11 +45,24 @@ audio_extract/
 │   ├── __init__.py
 │   ├── auth.py          # Authentication helpers
 │   ├── client.py        # Drive API client
-│   └── monitor.py       # Monitoring service
+│   ├── monitor.py       # Monitoring service
+│   └── storage_monitor.py  # Storage-aware monitor
+├── storage/             # Storage abstraction
+│   ├── __init__.py
+│   ├── base.py          # Abstract storage interface
+│   ├── factory.py       # Storage factory
+│   ├── local_storage.py # Local filesystem storage
+│   ├── gcs_storage.py   # Google Cloud Storage
+│   └── db_migrations.py # Database schema updates
 ├── cli/                 # CLI tools
 │   ├── __init__.py
 │   └── monitor.py       # Drive monitoring CLI
 ├── config.py            # Configuration management
+├── health.py            # Health check endpoints
+├── Dockerfile           # Docker container definition
+├── docker-compose.yml   # Development Docker setup
+├── docker-compose.prod.yml  # Production Docker setup
+├── nginx.conf           # Nginx reverse proxy config
 ├── run_tests.py         # Test runner
 ├── run_all_tests.py     # Comprehensive test suite
 ├── test_cli_tools.py    # CLI functionality tests
@@ -62,6 +77,29 @@ audio_extract/
 ├── LICENSE            # MIT License
 └── .gitignore         # Git ignore rules
 ```
+
+## Quick Start with Make
+
+A comprehensive Makefile is provided for easy development. All Python commands automatically use a virtual environment:
+
+```bash
+# Show all available commands
+make help
+
+# Complete development setup (creates venv automatically)
+make setup-dev
+
+# Run tests (uses venv/bin/python)
+make test
+
+# Start monitoring (uses venv/bin/python)
+make run
+
+# Build and run with Docker
+make docker-run
+```
+
+The virtual environment is created automatically at `./venv/` when you run any Python-based command. No need to activate it manually - the Makefile handles it for you.
 
 ## Installation
 
@@ -86,26 +124,24 @@ brew install ffmpeg
 
 ### Setup as Standalone Module
 
-The audio_extract module is designed to be isolated from the main project. Set it up in its own virtual environment:
+The audio_extract module is designed to be isolated from the main project. The Makefile automatically manages the virtual environment:
 
 ```bash
 # Navigate to the audio_extract directory
 cd audio_extract/
 
-# Create a dedicated virtual environment
-python -m venv venv
+# Run setup (creates venv and installs dependencies)
+make setup-dev
 
-# Activate the virtual environment
-# On Linux/macOS:
+# The virtual environment is used automatically by all make commands
+# If you need to activate it manually:
 source venv/bin/activate
 # On Windows:
 # venv\Scripts\activate
 
-# Install the module in development mode
-pip install -e .
-
-# For development with testing tools:
-pip install -e ".[dev]"
+# Or just use make commands which handle the venv automatically:
+make install       # Installs all dependencies
+make install-dev   # Installs dev dependencies too
 ```
 
 ### Install from Package
@@ -194,6 +230,95 @@ Then open `http://localhost:8080` in your browser to see:
 - Recent and failed jobs
 - Quick actions for reprocessing
 
+## Storage Options
+
+The module supports multiple storage backends for extracted audio files:
+
+### 1. Local Storage (Default)
+
+```yaml
+storage:
+  type: local
+  local:
+    path: ./output  # Where to save audio files
+```
+
+### 2. Google Cloud Storage (GCS)
+
+```yaml
+storage:
+  type: gcs
+  gcs:
+    bucket_name: my-audio-extracts
+    credentials_path: /path/to/gcs-service-account.json
+    public_access: false  # Use signed URLs
+    url_expiration_hours: 24
+```
+
+### 3. GCS via gcsfuse (Recommended for Development)
+
+Mount your GCS bucket as a local filesystem:
+
+```bash
+# Install gcsfuse
+sudo apt-get install gcsfuse  # Ubuntu/Debian
+brew install --cask macfuse && brew install gcsfuse  # macOS
+
+# Mount bucket
+gcsfuse --implicit-dirs my-bucket ~/audio-mount
+
+# Configure as local storage
+storage:
+  type: local
+  local:
+    path: ~/audio-mount/audio
+```
+
+Benefits:
+- No code changes between dev/prod
+- Files appear in GCS instantly
+- Simple file browsing
+- Cost effective (no API calls)
+
+## Health Monitoring
+
+The service provides health check endpoints for production monitoring:
+
+- `/health` - Overall health status
+- `/ready` - Readiness check
+- `/live` - Liveness check
+
+Access at `http://localhost:8081/health` (configurable with `--health-port`)
+
+## Docker Deployment
+
+### Development
+
+```bash
+# Build and run with docker-compose
+docker-compose up --build
+
+# Or run with custom config
+docker-compose run audio-extract --config /app/configs/custom.yaml
+```
+
+### Production
+
+```bash
+# Use production compose file
+docker-compose -f docker-compose.prod.yml up -d
+
+# Check health
+curl http://localhost/health
+```
+
+The production setup includes:
+- Nginx reverse proxy
+- Health check endpoints
+- Resource limits
+- Log rotation
+- Automatic restarts
+
 ## API Reference
 
 ### AudioExtractor
@@ -231,40 +356,38 @@ AudioChunker(max_size_mb=24, chunk_duration_minutes=15)
 
 The module includes a comprehensive test suite with unit tests, integration tests, and functional tests.
 
-### Run All Tests
+### Using Make Commands (Recommended)
 
 ```bash
-# Run the complete test suite
-python run_all_tests.py
+# Run all tests (uses venv automatically)
+make test
+
+# Run unit tests only
+make test-unit
+
+# Run integration tests
+make test-integration
+
+# Run with coverage report
+make coverage
 ```
 
-### Individual Test Suites
+### Manual Test Running
+
+If you prefer to run tests manually:
 
 ```bash
-# Unit tests (51 tests)
-python run_tests.py
+# Activate virtual environment first
+source venv/bin/activate
 
-# CLI tools functionality
-python test_cli_tools.py
-
-# Dashboard server tests
-python test_dashboard.py
-
-# Full integration test
-python test_full_integration.py
-```
-
-### Using pytest directly
-
-```bash
-# Run all unit tests
-pytest tests/ -v
+# Run all tests
+python -m pytest tests/ -v
 
 # Run specific test file
-pytest tests/test_extractor.py -v
+python -m pytest tests/test_extractor.py -v
 
 # Run with coverage
-pytest tests/ --cov=audio_extract --cov-report=html
+python -m pytest tests/ --cov=audio_extract --cov-report=html
 ```
 
 ### Test Coverage
@@ -298,6 +421,13 @@ The module provides specific exceptions:
 
 ```bash
 cd /workspaces/dnd_notetaker/audio_extract
+
+# Using make (recommended - handles venv automatically):
+make install
+
+# Or manually:
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -334,17 +464,6 @@ python -m audio_extract.dev_monitor --config audio_extract_config.dev.yaml
 python -m audio_extract.dev_monitor --config audio_extract_config.prod.yaml
 ```
 
-## Config-Driven Behavior
-
-| Setting | Dev | Prod |
-|---------|-----|------|
-| Run mode | Foreground (see output) | Background daemon |
-| Web dashboard | Yes (auto-opens) | No |
-| Check interval | 60 seconds | 5 minutes |
-| On error | **EXIT with full trace** | Email & continue |
-| Log level | DEBUG | INFO |
-| Keep videos | Yes | No (delete after) |
-
 ## How It Works
 
 1. **Monitors** your Google Drive folder for new Meet recordings
@@ -356,10 +475,22 @@ python -m audio_extract.dev_monitor --config audio_extract_config.prod.yaml
 ## Error Philosophy
 
 This module uses a **"fail fast"** approach:
-- **No try/except blocks** - errors bubble up immediately
-- **Full stack traces** - see exactly what went wrong
+- **No try/except blocks** - errors bubble up immediately with full stack traces
+- **Full visibility** - see exactly what went wrong and where
 - **Dev mode exits on error** - fix issues immediately
 - **Prod mode emails on error** - but keeps running via process manager
+
+**Why no try/except?**
+- Makes debugging MUCH easier during development
+- Real errors are visible immediately, not hidden
+- Production resilience comes from process managers (systemd, supervisor)
+- Exceptions are for truly exceptional cases only
+
+**When try/except is OK:**
+- Checking for optional dependencies (e.g., `import google.cloud.storage`)
+- External API calls that might legitimately fail
+- Resource cleanup that must happen even on error
+- Top-level error reporting (but still re-raise)
 
 ## Common Commands
 
@@ -379,7 +510,26 @@ python -m audio_extract.dev_monitor --config CONFIG_FILE --folder-id OTHER_FOLDE
 
 ## Production Deployment
 
-For production, use a process manager to handle restarts:
+### Using Docker (Recommended)
+
+1. Build the image:
+```bash
+docker build -t audio-extract .
+```
+
+2. Run with docker-compose:
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+3. Check logs:
+```bash
+docker-compose logs -f audio-extract
+```
+
+### Using systemd
+
+For production without Docker, use a process manager to handle restarts:
 
 **systemd example:**
 ```ini
@@ -420,3 +570,30 @@ WantedBy=multi-user.target
 - Verify folder ID is correct (from Drive URL)
 - Check service account has access to folder
 - Look for recordings with "meet", "recording", or "video" in name
+
+## Quick Make Commands Reference
+
+```bash
+# Essential Commands
+make help          # Show all available commands
+make setup-dev     # One-time development setup
+make test          # Run all tests
+make run           # Start monitoring (dev mode)
+make clean         # Clean temporary files
+
+# Testing
+make test-unit     # Unit tests only
+make coverage      # Tests with coverage report
+make test-connection # Test Drive connection
+
+# Docker
+make docker-build  # Build image
+make docker-run    # Run in Docker
+make docker-logs   # View logs
+
+# Development
+make dashboard     # Run dashboard only
+make run-once      # Single check cycle
+make lint          # Check code quality
+make format        # Auto-format code
+```

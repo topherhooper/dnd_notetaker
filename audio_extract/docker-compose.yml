@@ -1,0 +1,55 @@
+# Docker Compose configuration for audio_extract
+version: '3.8'
+
+services:
+  audio-extract:
+    build: .
+    container_name: audio-extract
+    volumes:
+      # Configuration files
+      - ./configs:/app/configs:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./output:/app/output
+      # Google credentials
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./credentials/service-account.json}:/app/credentials/service-account.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8080:8080"  # Dashboard
+      - "8081:8081"  # Health check
+    restart: unless-stopped
+    command: ["--config", "/app/configs/audio_extract_config.dev.yaml"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a volume for gcsfuse if using GCS
+  # gcsfuse:
+  #   image: gcr.io/google.com/cloudsdktool/cloud-sdk:alpine
+  #   container_name: gcsfuse
+  #   privileged: true
+  #   cap_add:
+  #     - SYS_ADMIN
+  #   devices:
+  #     - /dev/fuse
+  #   volumes:
+  #     - ./output:/mnt/audio-extracts
+  #     - ${GOOGLE_APPLICATION_CREDENTIALS:-./credentials/service-account.json}:/credentials/service-account.json:ro
+  #   environment:
+  #     - GOOGLE_APPLICATION_CREDENTIALS=/credentials/service-account.json
+  #   command: |
+  #     sh -c "
+  #     gcloud auth activate-service-account --key-file=/credentials/service-account.json &&
+  #     gcsfuse --implicit-dirs --key-file=/credentials/service-account.json your-bucket-name /mnt/audio-extracts &&
+  #     tail -f /dev/null
+  #     "
+
+volumes:
+  data:
+  logs:
+  output:

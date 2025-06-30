@@ -9,13 +9,7 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent
 
 # Run pytest from parent directory
-cmd = [
-    sys.executable,
-    '-m', 'pytest',
-    'audio_extract/tests/',
-    '-v',
-    '--tb=short'
-]
+cmd = [sys.executable, "-m", "pytest", "audio_extract/tests/", "-v", "--tb=short"]
 
 print(f"Running tests from: {parent_dir}")
 print(f"Command: {' '.join(cmd)}")

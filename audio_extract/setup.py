@@ -15,8 +15,13 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/yourusername/audio_extract",
-    packages=['audio_extract', 'audio_extract.dashboard', 'audio_extract.drive', 'audio_extract.cli'],
-    package_dir={'audio_extract': '.'},
+    packages=[
+        "audio_extract",
+        "audio_extract.dashboard",
+        "audio_extract.drive",
+        "audio_extract.cli",
+    ],
+    package_dir={"audio_extract": "."},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
