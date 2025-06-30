@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Extraction Status Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Audio Extraction Status Dashboard</h1>
+            <div class="status-indicator">
+                <span id="connection-status" class="status-dot"></span>
+                <span id="last-update">Never</span>
+            </div>
+        </header>
+        
+        <div class="health-status" id="health-section">
+            <h2>System Health</h2>
+            <div class="health-grid" id="health-grid">
+                <div class="health-item">
+                    <span class="health-icon" id="health-ffmpeg">⚪</span>
+                    <span class="health-label">FFmpeg</span>
+                    <span class="health-message" id="health-ffmpeg-msg">Checking...</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-icon" id="health-database">⚪</span>
+                    <span class="health-label">Database</span>
+                    <span class="health-message" id="health-database-msg">Checking...</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-icon" id="health-storage">⚪</span>
+                    <span class="health-label">Storage</span>
+                    <span class="health-message" id="health-storage-msg">Checking...</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-icon" id="health-temp_storage">⚪</span>
+                    <span class="health-label">Temp Storage</span>
+                    <span class="health-message" id="health-temp_storage-msg">Checking...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Processed</h3>
+                <div class="stat-value" id="stat-total">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Completed</h3>
+                <div class="stat-value success" id="stat-completed">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Failed</h3>
+                <div class="stat-value error" id="stat-failed">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Success Rate</h3>
+                <div class="stat-value" id="stat-success-rate">0%</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-header">
+                <h2>Recent Processing</h2>
+                <button id="refresh-btn" class="btn btn-primary">Refresh</button>
+            </div>
+            <div class="table-container">
+                <table id="recent-table">
+                    <thead>
+                        <tr>
+                            <th>File Path</th>
+                            <th>Status</th>
+                            <th>Processed</th>
+                            <th>Duration</th>
+                            <th>Audio Link</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-tbody">
+                        <tr>
+                            <td colspan="6" class="loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-header">
+                <h2>Failed Jobs</h2>
+                <button id="clear-failed-btn" class="btn btn-secondary">Clear All</button>
+            </div>
+            <div class="table-container">
+                <table id="failed-table">
+                    <thead>
+                        <tr>
+                            <th>File Path</th>
+                            <th>Error</th>
+                            <th>Failed At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="failed-tbody">
+                        <tr>
+                            <td colspan="4" class="loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Quick Actions</h2>
+            <div class="actions-grid">
+                <button id="cleanup-btn" class="btn btn-warning">
+                    Cleanup Old Entries (90+ days)
+                </button>
+                <button id="export-btn" class="btn btn-secondary">
+                    Export Statistics
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+# Staging Docker Compose configuration
+version: '3.8'
+
+services:
+  audio-extract:
+    image: ${REGISTRY}/${IMAGE_NAME}:${AUDIO_EXTRACT_TAG:-latest}
+    container_name: audio-extract-staging
+    # Required for FUSE/gcsfuse
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse
+    volumes:
+      # Configuration files
+      - ./configs:/app/configs:ro
+      - staging-data:/app/data
+      - staging-logs:/app/logs
+      # For local storage mode (fallback)
+      - staging-output:/app/output
+      # Google credentials - mount from host
+      - /etc/audio-extract/staging-credentials.json:/app/credentials/service-account.json:ro
+      # GCS credentials
+      - /etc/audio-extract/staging-gcs-credentials.json:/app/credentials/gcs-service-account.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      - PYTHONUNBUFFERED=1
+      # Staging environment
+      - ENVIRONMENT=staging
+      # GCSfuse configuration
+      - ENABLE_GCSFUSE=true
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME_STAGING:-your-audio-extracts-staging}
+      - GCS_CREDENTIALS_PATH=/app/credentials/gcs-service-account.json
+      # Additional staging settings
+      - AUDIO_EXTRACT_FOLDER_ID=${AUDIO_EXTRACT_FOLDER_ID_STAGING}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - ALERT_EMAIL=${ALERT_EMAIL_STAGING}
+    ports:
+      - "8080:8080"  # Dashboard
+      - "8081:8081"  # Health check
+    restart: always
+    command: ["--config", "/app/configs/audio_extract_config.staging.yaml"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Resource limits (lower than production)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+volumes:
+  staging-data:
+    driver: local
+  staging-logs:
+    driver: local
+  staging-output:
+    driver: local

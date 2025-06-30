@@ -1,0 +1,17 @@
+[flake8]
+max-line-length = 100
+exclude = __pycache__,venv,.git,.pytest_cache
+ignore = 
+    # Allow imports at module level (needed for __init__.py)
+    F401,
+    # Allow imports not at top (needed for optional imports)
+    E402,
+    # Allow f-strings without placeholders (for consistency)
+    F541,
+    # Allow bare except in specific cases
+    E722
+per-file-ignores = 
+    __init__.py:F401
+    tests/conftest.py:E402
+    cli/monitor.py:E402
+    examples/*.py:E402

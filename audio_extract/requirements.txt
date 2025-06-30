@@ -1,0 +1,25 @@
+# Audio Extract Module Requirements
+
+# Google Drive API dependencies:
+google-api-python-client>=2.0.0
+google-auth>=2.0.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=0.4.0
+
+# Optional: For configuration files
+pyyaml>=6.0
+
+# Optional: For Google Cloud Storage
+# Uncomment if using GCS storage instead of local/gcsfuse
+# google-cloud-storage>=2.10.0
+
+# For development and testing:
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+
+# Optional: For better logging
+colorlog>=6.7.0
+
+# For health check endpoint
+flask>=2.0.0

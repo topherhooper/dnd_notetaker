@@ -28,9 +28,12 @@ The following files contain detailed documentation that Claude Code should refer
 
 All significant changes MUST start with a planning document:
 
-1. **Create Planning Doc**: Write to `planning-docs/YYYY-MM-DD-feature-name.md`
+1. **Create/Update Planning Doc**: 
+   - Use a single planning document per feature branch
+   - Name format: `planning-docs/feature-branch-name.md`
+   - For current branch: `planning-docs/modularize-june282025.md`
 2. **User Review**: User reads and provides feedback via conversation
-3. **Iterate**: Claude Code updates planning doc based on feedback
+3. **Iterate**: Claude Code updates the same planning doc based on feedback
 4. **Implement**: Use finalized planning doc to guide implementation
 
 Planning documents should include:
@@ -39,6 +42,8 @@ Planning documents should include:
 - Impact analysis
 - Testing strategy
 - Migration plan (if applicable) including files that will need to be updated or deleted.
+
+**Note**: Each feature branch should maintain a single planning document that evolves throughout the planning phase, rather than creating multiple dated documents.
 
 ## User Usage
 Start YOLO Session:
@@ -51,3 +56,26 @@ Start with planning a feature:
 
 Followed by a request to implement:
 > prompt with very clear instructions. Iterate until the plan is met and the features are rock solid for the following feature doc: planning-docs/2025-01-20-development-test-mode.md
+
+## Error Handling Philosophy: Fail Fast
+
+This codebase follows a **"fail fast"** philosophy for better debugging and development:
+
+1. **NO try/except blocks** in most code - let errors bubble up with full stack traces
+2. **Exceptions are for truly exceptional cases** - use them sparingly, if at all
+3. **Full visibility into errors** - see exactly what went wrong and where
+4. **Development mode exits on error** - fix issues immediately
+5. **Production resilience through process managers** - systemd/supervisor handle restarts
+
+### When try/except is acceptable:
+- External API calls that might legitimately fail (network issues)
+- Resource cleanup that must happen even on error
+- Top-level error reporting (but still re-raise)
+
+### What to do instead:
+- Let errors propagate naturally
+- Use proper validation before operations
+- Check preconditions explicitly
+- Use process managers for production resilience
+
+This approach makes development MUCH easier by showing real errors immediately.
