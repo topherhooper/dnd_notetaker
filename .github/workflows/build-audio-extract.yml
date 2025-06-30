@@ -53,9 +53,11 @@ jobs:
         tags: |
           type=ref,event=branch
           type=ref,event=pr
+          type=sha,format=long
+          type=sha,format=short,prefix=sha-
+          type=raw,value={{branch}}-{{sha}},enable=${{ github.ref_type == 'branch' }}
           type=semver,pattern={{version}},prefix=v
           type=semver,pattern={{major}}.{{minor}},prefix=v
-          type=sha,prefix=sha-
           type=raw,value=latest,enable={{is_default_branch}}
           type=raw,value=${{ github.event.inputs.tag_name }},enable=${{ github.event_name == 'workflow_dispatch' }}
     
@@ -70,6 +72,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         platforms: linux/amd64
+        load: ${{ github.event_name == 'pull_request' }}
     
     - name: Test the built image
       if: github.event_name == 'pull_request'
