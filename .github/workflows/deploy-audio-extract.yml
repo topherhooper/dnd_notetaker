@@ -42,7 +42,8 @@ jobs:
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
         else
-          echo "tag=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          # Use the SHA tag format that matches the build workflow
+          echo "tag=sha-$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
         fi
     
     - name: Deploy to staging
@@ -126,7 +127,8 @@ jobs:
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
         else
-          echo "tag=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          # Use the SHA tag format that matches the build workflow
+          echo "tag=sha-$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
         fi
     
     - name: Pre-deployment checks

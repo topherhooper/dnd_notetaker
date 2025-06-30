@@ -78,16 +78,16 @@ else
     echo "GCSfuse is disabled, using local storage"
     
     # Ensure local output directory exists
-    mkdir -p /app/output
+    mkdir -p /workspace/audio_extract/output
 fi
 
 # Update configuration if needed
-if [[ "${ENABLE_GCSFUSE}" == "true" ]] && [[ -f "/app/configs/audio_extract_config.yaml" ]]; then
+if [[ "${ENABLE_GCSFUSE}" == "true" ]] && [[ -f "/workspace/audio_extract/configs/audio_extract_config.yaml" ]]; then
     # Check if we need to update the output path in config
     if [[ "${UPDATE_CONFIG_PATH}" == "true" ]]; then
         echo "Updating configuration to use GCS mount..."
         # This would normally use a proper YAML parser, but for simplicity:
-        sed -i "s|output_directory:.*|output_directory: /mnt/audio-extracts/${ENVIRONMENT:-dev}|g" /app/configs/audio_extract_config.yaml
+        sed -i "s|output_directory:.*|output_directory: /mnt/audio-extracts/${ENVIRONMENT:-dev}|g" /workspace/audio_extract/configs/audio_extract_config.yaml
     fi
 fi
 
@@ -110,7 +110,7 @@ check_storage_health() {
             return 1
         fi
     else
-        if [[ -d /app/output ]] && [[ -w /app/output ]]; then
+        if [[ -d /workspace/audio_extract/output ]] && [[ -w /workspace/audio_extract/output ]]; then
             echo "Storage health: OK (local storage)"
             return 0
         else
@@ -123,6 +123,13 @@ check_storage_health() {
 # Export health check function for the application
 export -f check_storage_health
 
-# Start the audio extract service
+# Start the audio extract service using the virtual environment
 echo "Starting audio_extract service..."
-exec python -m audio_extract.cli.monitor "$@"
+cd /workspace/audio_extract
+if [[ -f /workspace/audio_extract/venv/bin/python ]]; then
+    echo "Using virtual environment Python"
+    exec /workspace/audio_extract/venv/bin/python -m audio_extract.cli.monitor "$@"
+else
+    echo "Using system Python"
+    exec python -m audio_extract.cli.monitor "$@"
+fi

@@ -10,29 +10,40 @@ RUN apt-get update && apt-get install -y \
     tini \
     fuse \
     ca-certificates \
+    make \
     && echo "deb https://packages.cloud.google.com/apt gcsfuse-$(lsb_release -c -s) main" > /etc/apt/sources.list.d/gcsfuse.list \
     && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
     && apt-get update \
     && apt-get install -y gcsfuse \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user with access to fuse
-RUN useradd -m -u 1000 audioextract && \
+# Create non-root user and fuse group if it doesn't exist
+RUN groupadd -f fuse && \
+    useradd -m -u 1000 audioextract && \
     usermod -a -G fuse audioextract
 
-# Set working directory
-WORKDIR /app
+# Set working directory to parent of audio_extract
+WORKDIR /workspace
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Create audio_extract directory and copy all code into it
+RUN mkdir -p audio_extract
+COPY . audio_extract/
 
-# Copy application code
-COPY . .
+# Change to audio_extract directory
+WORKDIR /workspace/audio_extract
+
+# Install dependencies using the Makefile (creates venv and installs requirements)
+RUN make install
+
+# Install the audio_extract package in editable mode
+RUN /workspace/audio_extract/venv/bin/pip install -e .
 
 # Create directories for data, logs, output, and GCS mount
-RUN mkdir -p /app/data /app/logs /app/output /mnt/audio-extracts && \
-    chown -R audioextract:audioextract /app /mnt/audio-extracts
+RUN mkdir -p /workspace/audio_extract/data /workspace/audio_extract/logs /workspace/audio_extract/output /mnt/audio-extracts && \
+    chown -R audioextract:audioextract /workspace /mnt/audio-extracts
+
+# Set PYTHONPATH so Python can find the audio_extract module
+ENV PYTHONPATH=/workspace:$PYTHONPATH
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/

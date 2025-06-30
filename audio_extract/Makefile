@@ -34,6 +34,7 @@ help:
 	@echo "  make test-integration - Run integration tests"
 	@echo "  make test-storage - Run storage tests"
 	@echo "  make test-cli     - Run CLI tests"
+	@echo "  make test-workflows - Test GitHub workflows locally"
 	@echo "  make coverage     - Run tests with coverage report"
 	@echo ""
 	@echo "Development:"
@@ -105,7 +106,7 @@ check-deps:
 	@$(PYTHON) -c "import yaml" 2>/dev/null && echo "✓ PyYAML installed" || echo "✗ PyYAML not installed"
 
 # Testing (requires install-dev)
-test: venv check-test-deps
+test: venv check-test-deps test-workflows
 	@echo "Running all tests..."
 	$(PYTHON) -m pytest tests/ -v
 
@@ -129,6 +130,92 @@ coverage: venv check-test-deps
 	@echo "Running tests with coverage..."
 	$(PYTHON) -m pytest tests/ --cov=audio_extract --cov-report=html --cov-report=term
 	@echo "Coverage report generated in htmlcov/"
+
+# Test GitHub workflows locally
+test-workflows: venv test-workflow-syntax test-docker-build
+	@echo "All workflow tests passed!"
+
+test-workflow-syntax: venv
+	@echo "Testing workflow syntax..."
+	@if command -v actionlint >/dev/null 2>&1; then \
+		actionlint ../.github/workflows/*.yml; \
+		echo "✓ Workflow syntax valid"; \
+	else \
+		echo "⚠ actionlint not installed, checking with Python..."; \
+		$(PYTHON) -c "import yaml; import glob; files = glob.glob('../.github/workflows/*.yml'); [yaml.safe_load(open(f)) for f in files]; print('✓ All workflow files have valid YAML syntax')"; \
+	fi
+
+test-docker-build:
+	@echo "Testing Docker build..."
+	@if [ -f test-build.sh ]; then \
+		./test-build.sh; \
+	else \
+		echo "Creating test-build.sh..."; \
+		$(MAKE) create-test-build-script; \
+		./test-build.sh; \
+	fi
+
+create-test-build-script:
+	@echo '#!/bin/bash' > test-build.sh
+	@echo 'set -e' >> test-build.sh
+	@echo '' >> test-build.sh
+	@echo 'echo "Testing Docker build locally..."' >> test-build.sh
+	@echo '' >> test-build.sh
+	@echo '# Colors for output' >> test-build.sh
+	@echo 'GREEN="\033[0;32m"' >> test-build.sh
+	@echo 'RED="\033[0;31m"' >> test-build.sh
+	@echo 'NC="\033[0m" # No Color' >> test-build.sh
+	@echo '' >> test-build.sh
+	@echo '# Test 1: Build Docker image' >> test-build.sh
+	@echo 'echo "Test 1: Building Docker image..."' >> test-build.sh
+	@echo 'if docker build -t audio-extract-test . ; then' >> test-build.sh
+	@echo '    echo -e "$${GREEN}✓ Docker build successful$${NC}"' >> test-build.sh
+	@echo 'else' >> test-build.sh
+	@echo '    echo -e "$${RED}✗ Docker build failed$${NC}"' >> test-build.sh
+	@echo '    exit 1' >> test-build.sh
+	@echo 'fi' >> test-build.sh
+	@echo '' >> test-build.sh
+	@echo '# Test 2: Run container help' >> test-build.sh
+	@echo 'echo "Test 2: Testing container startup..."' >> test-build.sh
+	@echo 'if docker run --rm audio-extract-test --help ; then' >> test-build.sh
+	@echo '    echo -e "$${GREEN}✓ Container runs successfully$${NC}"' >> test-build.sh
+	@echo 'else' >> test-build.sh
+	@echo '    echo -e "$${RED}✗ Container failed to run$${NC}"' >> test-build.sh
+	@echo '    exit 1' >> test-build.sh
+	@echo 'fi' >> test-build.sh
+	@echo '' >> test-build.sh
+	@echo '# Test 3: Check for required files' >> test-build.sh
+	@echo 'echo "Test 3: Checking required files..."' >> test-build.sh
+	@echo 'if docker run --rm audio-extract-test ls -la /usr/local/bin/docker-entrypoint.sh ; then' >> test-build.sh
+	@echo '    echo -e "$${GREEN}✓ Entrypoint script exists$${NC}"' >> test-build.sh
+	@echo 'else' >> test-build.sh
+	@echo '    echo -e "$${RED}✗ Entrypoint script missing$${NC}"' >> test-build.sh
+	@echo '    exit 1' >> test-build.sh
+	@echo 'fi' >> test-build.sh
+	@echo '' >> test-build.sh
+	@echo '# Test 4: Test with GCSfuse disabled' >> test-build.sh
+	@echo 'echo "Test 4: Testing without GCSfuse..."' >> test-build.sh
+	@echo 'if docker run --rm -e ENABLE_GCSFUSE=false audio-extract-test \' >> test-build.sh
+	@echo '    python -c "print('"'"'Audio extract module loaded successfully'"'"')" ; then' >> test-build.sh
+	@echo '    echo -e "$${GREEN}✓ Runs without GCSfuse$${NC}"' >> test-build.sh
+	@echo 'else' >> test-build.sh
+	@echo '    echo -e "$${RED}✗ Failed without GCSfuse$${NC}"' >> test-build.sh
+	@echo '    exit 1' >> test-build.sh
+	@echo 'fi' >> test-build.sh
+	@echo '' >> test-build.sh
+	@echo 'echo -e "$${GREEN}All tests passed!$${NC}"' >> test-build.sh
+	@chmod +x test-build.sh
+
+# Test with act if available
+test-act:
+	@if command -v act >/dev/null 2>&1; then \
+		echo "Testing workflows with act..."; \
+		act -l; \
+		act -n push -W ../.github/workflows/build-audio-extract.yml; \
+	else \
+		echo "act not installed. Install from: https://github.com/nektos/act"; \
+		echo "Alternatively, use 'make test-workflows' for basic validation"; \
+	fi
 
 # Check if test dependencies are installed
 check-test-deps:

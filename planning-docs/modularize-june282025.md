@@ -699,11 +699,19 @@ audio-extracts-bucket/
     └── 2025/01/meeting_audio.mp3
 ```
 
+## Build Workflow Fix (COMPLETED)
+
+Fixed the GitHub Actions build workflow issue where Docker tags were invalid:
+- Changed `type=sha,prefix={{branch}}-` to `type=sha,prefix=sha-` to avoid empty branch names in PRs
+- Simplified platform builds to `linux/amd64` only (can add ARM later)
+- Made docker-entrypoint.sh executable
+- Updated deploy workflow to match new tag format
+
 ## Next Steps for Production
 
 1. **GCS Setup**
    - Create GCP project and enable Storage API
-   - Create storage buckets (dev and prod)
+   - Create storage buckets (dev, staging, and prod)
    - Set up service account with minimal permissions
    - Test gcsfuse mounting in development
 
