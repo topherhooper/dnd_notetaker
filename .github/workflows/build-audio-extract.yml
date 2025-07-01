@@ -13,24 +13,33 @@ on:
   push:
     branches: [ main, master ]
     tags:
+      # Trigger on version tags like audio-extract-v1.2.3
       - 'audio-extract-v*'
     paths:
+      # Only build when audio_extract code or this workflow changes
+      # This saves CI minutes by avoiding unnecessary builds
       - 'audio_extract/**'
       - '.github/workflows/build-audio-extract.yml'
   pull_request:
     branches: [ main, master ]
     paths:
+      # Same path filtering for PRs to avoid building unrelated changes
       - 'audio_extract/**'
       - '.github/workflows/build-audio-extract.yml'
   workflow_dispatch:
+    # Manual trigger allows building with custom tags for testing
     inputs:
       tag_name:
         description: 'Tag name for the Docker image'
         required: false
         default: 'latest'
 
+# Environment variables used throughout the workflow
 env:
+  # GitHub Container Registry - free for public repos, integrated with GitHub
   REGISTRY: ghcr.io
+  # Image name includes repo owner/name for uniqueness
+  # e.g., ghcr.io/username/dnd_notetaker/audio-extract
   IMAGE_NAME: ${{ github.repository }}/audio-extract
 
 jobs:
@@ -45,72 +54,98 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Set up Docker Buildx
+      # Buildx enables advanced features like multi-platform builds and caching
       uses: docker/setup-buildx-action@v3
     
     - name: Log in to GitHub Container Registry
       # Skip login for PR builds since we won't push
+      # This prevents authentication failures for external contributors
       if: github.event_name != 'pull_request'
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
+        # GITHUB_TOKEN is automatically provided by Actions
+        # It has write access to packages in the same repo
         password: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Generate Docker tags
       id: tags
       run: |
+        # Initialize empty tags list
         TAGS=""
         
-        # Always include SHA tag
+        # Always include SHA tag for traceability
+        # Format: sha-abc123def456 (full SHA for uniqueness)
         TAGS="${REGISTRY}/${IMAGE_NAME}:sha-${GITHUB_SHA}"
         
-        # For main/master branch pushes, add 'latest'
+        # For main/master branch pushes, add 'latest' tag
+        # This allows users to always pull the most recent stable build
         if [[ "${{ github.ref }}" == "refs/heads/main" ]] || [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
           TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
         fi
         
-        # For version tags, add the version
+        # For version tags, extract and add the version
+        # e.g., refs/tags/audio-extract-v1.2.3 -> v1.2.3
         if [[ "${{ github.ref }}" == refs/tags/audio-extract-v* ]]; then
           VERSION=${GITHUB_REF#refs/tags/audio-extract-}
           TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
         fi
         
-        # For manual builds, add custom tag
+        # For manual builds, add custom tag if provided
+        # Useful for testing specific builds
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ -n "${{ github.event.inputs.tag_name }}" ]]; then
           TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag_name }}"
         fi
         
+        # Output tags for use in next steps
         echo "tags=${TAGS}" >> $GITHUB_OUTPUT
     
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
+        # Build context is the audio_extract directory
         context: ./audio_extract
         file: ./audio_extract/Dockerfile
+        # Only push images for non-PR events (push, tags, manual)
+        # PRs build but don't push to avoid cluttering registry
         push: ${{ github.event_name != 'pull_request' }}
+        # Use all generated tags from previous step
         tags: ${{ steps.tags.outputs.tags }}
+        # GitHub Actions cache speeds up builds by reusing layers
+        # 'gha' = GitHub Actions cache backend
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        # Single platform for now (most cloud providers use amd64)
+        # Can add linux/arm64 later if needed
         platforms: linux/amd64
         # Load image into Docker daemon for PR testing
+        # This allows us to test the image without pushing it
         load: ${{ github.event_name == 'pull_request' }}
     
     - name: Test the built image
       run: |
         # Test the image to ensure it runs correctly
+        # This catches basic issues like missing dependencies or startup failures
         IMAGE_TO_TEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
         echo "Testing image: ${IMAGE_TO_TEST}"
+        # Run with --rm to clean up after test
+        # --help should work without any config/credentials
         docker run --rm ${IMAGE_TO_TEST} --help
     
     - name: Generate build summary
+      # Only generate summary for builds that push images
       if: github.event_name != 'pull_request'
       run: |
+        # GITHUB_STEP_SUMMARY creates a markdown summary in the Actions UI
+        # This provides a quick overview of what was built and pushed
         echo "## Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
         echo "**Repository:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Tags pushed:**" >> $GITHUB_STEP_SUMMARY
+        # Convert comma-separated tags to bullet list
         echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n' | sed 's/^/- `/' | sed 's/$/`/' >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

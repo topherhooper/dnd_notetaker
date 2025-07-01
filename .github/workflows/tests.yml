@@ -9,8 +9,10 @@ name: Tests
 
 on:
   push:
+    # Run tests on direct pushes to main branches
     branches: [ main, master ]
   pull_request:
+    # Run tests on PRs to catch issues before merge
     branches: [ main, master ]
 
 jobs:
@@ -19,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # Test on min and max supported Python versions
+        # 3.10 is minimum for some dependencies
+        # 3.12 is latest stable
         python-version: ['3.10', '3.12']
 
     steps:
@@ -31,23 +36,33 @@ jobs:
     
     - name: Install system dependencies
       run: |
+        # Update package list for latest versions
         sudo apt-get update
+        # FFmpeg is required for audio extraction tests
         sudo apt-get install -y ffmpeg
     
     - name: Install Python dependencies
       run: |
+        # Upgrade pip to avoid compatibility issues
         python -m pip install --upgrade pip
+        # Install project dependencies
         pip install -r requirements.txt
+        # Install project in editable mode for testing
         pip install -e .
     
     - name: Run tests with pytest
       run: |
+        # Run tests with verbose output and coverage reporting
+        # --cov=. measures coverage for the entire project
+        # --cov-report=term-missing shows which lines aren't covered
         python -m pytest -v --cov=. --cov-report=term-missing
     
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
+      # Only upload once per workflow run (from Python 3.12)
       if: matrix.python-version == '3.12'
       env:
+        # Token is optional for public repos but improves reliability
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # Audio Extract module specific tests
@@ -55,10 +70,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # Match Python versions with main tests
         python-version: ['3.10', '3.12']
     
     defaults:
       run:
+        # All commands run from audio_extract directory
         working-directory: ./audio_extract
 
     steps:
@@ -71,21 +88,29 @@ jobs:
     
     - name: Install system dependencies
       run: |
+        # Update package list for latest versions
         sudo apt-get update
+        # FFmpeg is required for audio extraction tests
         sudo apt-get install -y ffmpeg
     
     - name: Install Python dependencies
       run: |
+        # Use Makefile for consistent dev setup
+        # This creates venv and installs all dev dependencies
         make install-dev
     
     - name: Run all tests with coverage
       run: |
+        # Run comprehensive test suite with coverage
+        # The Makefile handles pytest configuration
         make coverage
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
+      # Only upload once per workflow run
       if: matrix.python-version == '3.12'
       with:
+        # Separate flags for module-specific coverage tracking
         flags: audio-extract
         name: audio-extract-coverage
       env:

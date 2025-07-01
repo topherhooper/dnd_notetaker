@@ -15,11 +15,14 @@ name: Deploy Audio Extract
 
 on:
   workflow_run:
+    # Trigger after successful builds
     workflows: ["Build Audio Extract"]
     types:
       - completed
+    # Only for builds from main branches (not PRs or other branches)
     branches: [main, master]
   workflow_dispatch:
+    # Manual deployment allows choosing environment and specific image tag
     inputs:
       environment:
         description: 'Deployment environment'
@@ -41,12 +44,16 @@ env:
 jobs:
   deploy-staging:
     # Deploy to staging on:
-    # - Successful builds from main/master
+    # - Successful builds from main/master (automatic continuous deployment)
     # - Manual workflow dispatch with staging environment
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
     runs-on: ubuntu-latest
+    # Using GitHub environments provides:
+    # - Environment-specific secrets
+    # - Deployment protection rules
+    # - Deployment history tracking
     environment: staging
     steps:
     - name: Checkout repository
@@ -57,46 +64,54 @@ jobs:
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           # Use the provided tag for manual deployments
+          # This allows deploying specific versions or testing builds
           echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
         else
           # For automatic deployments, use the SHA from the build workflow
+          # This ensures we deploy exactly what was built and tested
           echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
         fi
     
     - name: Deploy to staging
       env:
+        # Environment-specific secrets from GitHub environment settings
         DEPLOY_HOST: ${{ secrets.STAGING_HOST }}
         DEPLOY_USER: ${{ secrets.STAGING_USER }}
         DEPLOY_KEY: ${{ secrets.STAGING_SSH_KEY }}
         IMAGE_TAG: ${{ steps.set-tag.outputs.tag }}
       run: |
-        # Setup SSH
+        # Setup SSH connection
         mkdir -p ~/.ssh
         echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
+        # Add host to known_hosts to avoid interactive prompt
         ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
         
-        # Deploy script
+        # Deploy script executed on remote server
         ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
-          set -e
+          set -e  # Exit on any error
           cd /opt/audio-extract
           
-          # Pull latest config
+          # Pull latest config from git
+          # This ensures docker-compose.yml and other configs are up to date
           git pull origin main
           
-          # Set the full image reference
+          # Set the full image reference for docker-compose
           export AUDIO_EXTRACT_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}"
           echo "Deploying image: \${AUDIO_EXTRACT_IMAGE}"
           
-          # Pull new image
+          # Pull new image before deployment
           docker pull \${AUDIO_EXTRACT_IMAGE}
           
-          # Deploy with zero downtime
+          # Zero-downtime deployment strategy:
+          # 1. Start new container alongside old one (scale=2)
           docker-compose -f docker-compose.staging.yml up -d --no-deps --scale audio-extract=2 audio-extract
+          # 2. Wait for new container to be ready
           sleep 30
+          # 3. Remove old container and scale back to 1
           docker-compose -f docker-compose.staging.yml up -d --no-deps --remove-orphans audio-extract
           
-          # Health check
+          # Verify deployment succeeded
           sleep 10
           curl -f http://localhost:8081/health || exit 1
           
@@ -107,10 +122,11 @@ jobs:
       env:
         STAGING_URL: ${{ secrets.STAGING_URL }}
       run: |
-        # Basic health check
+        # Basic health check ensures service is running
         curl -f $STAGING_URL/health
         
-        # Check specific endpoints
+        # Check specific endpoints to verify functionality
+        # api/stats endpoint shows processing statistics
         curl -f $STAGING_URL/api/stats
         
         echo "Smoke tests passed!"
@@ -128,12 +144,20 @@ jobs:
     # - Manual workflow dispatch with production environment
     # - Successful staging deployment (when applicable)
     needs: [deploy-staging]
+    # Complex condition explained:
+    # - always(): Run regardless of staging status (allows skipping staging)
+    # - Must be manual trigger with production selected
+    # - Staging must have succeeded or been skipped (not failed)
     if: |
       always() && 
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.environment == 'production' &&
       (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
     runs-on: ubuntu-latest
+    # Production environment likely has:
+    # - Required reviewers
+    # - Deployment protection rules
+    # - Different secrets than staging
     environment: production
     steps:
     - name: Checkout repository
@@ -144,9 +168,11 @@ jobs:
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           # Use the provided tag for manual deployments
+          # This allows deploying specific versions or testing builds
           echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
         else
           # For automatic deployments, use the SHA from the build workflow
+          # This ensures we deploy exactly what was built and tested
           echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
         fi
     
@@ -171,46 +197,49 @@ jobs:
         chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
         
-        # Deploy script
+        # Deploy script with additional safety measures for production
         ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
-          set -e
+          set -e  # Exit on any error
           cd /opt/audio-extract
           
-          # Backup current config
+          # Backup current config for rollback capability
           cp docker-compose.prod.yml docker-compose.prod.yml.backup
           
-          # Pull latest config
+          # Pull latest config from git
           git pull origin main
           
-          # Set environment variables
+          # Set environment variables for production
           export AUDIO_EXTRACT_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}"
+          # Production-specific configs from secrets
           export GCS_BUCKET_NAME="${{ env.GCS_BUCKET_NAME }}"
           export AUDIO_EXTRACT_FOLDER_ID="${{ env.AUDIO_EXTRACT_FOLDER_ID }}"
           
           echo "Deploying image: \${AUDIO_EXTRACT_IMAGE}"
           
-          # Pull new image
+          # Pull new image before deployment
           docker pull \${AUDIO_EXTRACT_IMAGE}
           
-          # Deploy with rolling update
+          # Rolling update for zero downtime:
+          # 1. Start new containers alongside existing ones
           docker-compose -f docker-compose.prod.yml up -d --no-deps --scale audio-extract=2 audio-extract
           
-          # Wait for new container to be healthy
+          # 2. Longer wait for production to ensure stability
           sleep 60
           
-          # Remove old containers
+          # 3. Remove old containers
           docker-compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans audio-extract
           
-          # Verify deployment
+          # Verify deployment with automatic rollback on failure
           sleep 10
           if ! curl -f http://localhost:8081/health; then
             echo "Health check failed! Rolling back..."
+            # Restore backup config and redeploy
             cp docker-compose.prod.yml.backup docker-compose.prod.yml
             docker-compose -f docker-compose.prod.yml up -d
             exit 1
           fi
           
-          # Clean up old images
+          # Clean up old images to save disk space
           docker image prune -f
           
           echo "Production deployment successful!"
@@ -220,14 +249,15 @@ jobs:
       env:
         PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
       run: |
-        # Comprehensive health checks
+        # Comprehensive health checks for production
         curl -f $PRODUCTION_URL/health
         
-        # Verify all components
+        # Parse and verify all components are healthy
         health_response=$(curl -s $PRODUCTION_URL/health)
         echo "Health check response: $health_response"
         
-        # Check if GCSfuse is mounted
+        # Check if GCSfuse is mounted (critical for production)
+        # Storage component must be healthy for audio file access
         if [[ $(echo $health_response | jq -r '.components.storage.status') != "healthy" ]]; then
           echo "Storage component is not healthy!"
           exit 1
@@ -237,6 +267,8 @@ jobs:
     
     - name: Production deployment summary
       run: |
+        # Create detailed summary for production deployments
+        # This is critical for audit trails and troubleshooting
         echo "## Production Deployment Successful" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Image deployed:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
@@ -244,6 +276,7 @@ jobs:
         echo "**URL:** ${{ secrets.PRODUCTION_URL }}" >> $GITHUB_STEP_SUMMARY
         echo "**Time:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
+        # Include health check results for verification
         echo "### Health Check Results" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
         curl -s ${{ secrets.PRODUCTION_URL }}/health | jq '.' >> $GITHUB_STEP_SUMMARY || echo "Failed to fetch health status" >> $GITHUB_STEP_SUMMARY
