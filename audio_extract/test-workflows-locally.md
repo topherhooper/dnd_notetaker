@@ -209,34 +209,28 @@ docker run --rm \
 docker buildx build --platform linux/amd64 -t test:latest ./audio_extract
 ```
 
-### 3. Create Makefile Target
+### 3. Using the Makefile Targets
 
-Add to the Makefile:
+The main project Makefile includes targets for testing workflows:
 
-```makefile
-# Test GitHub workflows locally
-test-workflows:
-	@echo "Testing workflow syntax..."
-	@if command -v actionlint >/dev/null 2>&1; then \
-		actionlint; \
-	else \
-		echo "actionlint not installed, skipping syntax check"; \
-	fi
-	@echo "Testing Docker build..."
-	@./test-build.sh
-	@echo "Testing docker-compose..."
-	@docker-compose build --no-cache
-	@echo "All workflow tests passed!"
+```bash
+# From the project root directory
+cd /workspaces/dnd_notetaker
 
-# Test with act
-test-act:
-	@if command -v act >/dev/null 2>&1; then \
-		act -n push -W .github/workflows/build-audio-extract.yml; \
-	else \
-		echo "act not installed. Install from: https://github.com/nektos/act"; \
-		exit 1; \
-	fi
+# Test all workflows
+make test-workflows
+
+# Test workflow syntax only
+make test-workflow-syntax
+
+# Test Docker build for audio-extract
+make test-docker-build
+
+# Test with act if installed
+make test-act
 ```
+
+These commands are available in the main project Makefile and test all GitHub workflows from the project root.
 
 ## Common Issues and Solutions
 

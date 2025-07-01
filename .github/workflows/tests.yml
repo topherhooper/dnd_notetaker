@@ -1,3 +1,10 @@
+# Run tests for the entire repository
+#
+# This workflow:
+# - Tests on Python 3.10 and 3.12 (min and max supported versions)
+# - Runs both main repository and audio_extract module tests
+# - Uploads coverage reports to Codecov
+
 name: Tests
 
 on:
@@ -12,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.12']
 
     steps:
     - uses: actions/checkout@v4
@@ -48,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.12']
     
     defaults:
       run:
@@ -71,25 +78,9 @@ jobs:
       run: |
         make install-dev
     
-    - name: Run all tests
+    - name: Run all tests with coverage
       run: |
-        make test
-    
-    - name: Run unit tests
-      run: |
-        make test-unit
-    
-    - name: Run integration tests
-      run: |
-        make test-integration
-    
-    - name: Run storage tests
-      run: |
-        make test-storage
-    
-    - name: Test CLI functionality
-      run: |
-        make test-cli
+        make coverage
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3

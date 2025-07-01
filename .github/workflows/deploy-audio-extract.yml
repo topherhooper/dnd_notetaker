@@ -1,8 +1,19 @@
+# Deploy the audio-extract service to staging or production
+#
+# This workflow:
+# - Automatically deploys to staging after successful builds on main/master
+# - Supports manual deployment to staging or production
+# - Performs health checks after deployment
+# - Handles rollback on failure
+#
+# Required secrets:
+# - STAGING_HOST, STAGING_USER, STAGING_SSH_KEY
+# - PRODUCTION_HOST, PRODUCTION_USER, PRODUCTION_SSH_KEY
+# - GCS_BUCKET_NAME, AUDIO_EXTRACT_FOLDER_ID (for production)
+
 name: Deploy Audio Extract
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   workflow_run:
     workflows: ["Build Audio Extract"]
     types:
@@ -19,22 +30,22 @@ on:
           - staging
           - production
       image_tag:
-        description: 'Docker image tag to deploy'
+        description: 'Docker image tag to deploy (e.g., latest, v1.2.3, sha-abc123)'
         required: false
         default: 'latest'
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/audio-extract
-  SHA_TAG: ${{env.IMAGE_NAME}}:${{ github.event.pull_request.head.sha }}
 
 jobs:
   deploy-staging:
+    # Deploy to staging on:
+    # - Successful builds from main/master
+    # - Manual workflow dispatch with staging environment
     if: |
-      github.event_name == 'pull_request' ||
-      github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && 
-       (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master'))
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -45,13 +56,11 @@ jobs:
       id: set-tag
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          # Use the provided tag for manual deployments
           echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
-        elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-          # For workflow_run events, use the SHA from the triggering workflow
-          echo "tag=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
         else
-          # Use the full SHA for all other events
-          echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          # For automatic deployments, use the SHA from the build workflow
+          echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
         fi
     
     - name: Deploy to staging
@@ -68,20 +77,19 @@ jobs:
         ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
         
         # Deploy script
-        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
           set -e
           cd /opt/audio-extract
           
           # Pull latest config
           git pull origin main
           
-          # Update image tag in docker-compose
-          export AUDIO_EXTRACT_TAG=${{ env.IMAGE_TAG }}
-          export REGISTRY=${{ env.REGISTRY }}
-          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          # Set the full image reference
+          export AUDIO_EXTRACT_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}"
+          echo "Deploying image: \${AUDIO_EXTRACT_IMAGE}"
           
           # Pull new image
-          docker-compose -f docker-compose.staging.yml pull
+          docker pull \${AUDIO_EXTRACT_IMAGE}
           
           # Deploy with zero downtime
           docker-compose -f docker-compose.staging.yml up -d --no-deps --scale audio-extract=2 audio-extract
@@ -107,37 +115,24 @@ jobs:
         
         echo "Smoke tests passed!"
     
-    - name: Notify deployment
-      uses: actions/github-script@v7
-      if: github.event_name == 'pull_request' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
-      with:
-        script: |
-          let pr_number;
-          if (context.eventName === 'pull_request') {
-            pr_number = context.payload.pull_request.number;
-          } else if (context.eventName === 'workflow_run') {
-            pr_number = context.payload.workflow_run.pull_requests[0]?.number;
-          }
-          
-          if (pr_number) {
-            github.rest.issues.createComment({
-              issue_number: pr_number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '🚀 Deployed to **staging** environment!\n\nImage: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}`'
-            });
-          }
+    - name: Deployment summary
+      run: |
+        echo "## Staging Deployment Successful" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Image deployed:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** staging" >> $GITHUB_STEP_SUMMARY
+        echo "**Time:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   deploy-production:
-    needs: deploy-staging
+    # Production deployment requires:
+    # - Manual workflow dispatch with production environment
+    # - Successful staging deployment (when applicable)
+    needs: [deploy-staging]
     if: |
-      github.event_name != 'pull_request' && (
-        github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' ||
-        (github.event_name == 'workflow_run' && 
-         github.event.workflow_run.conclusion == 'success' && 
-         github.event.workflow_run.event != 'pull_request' &&
-         (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master'))
-      )
+      always() && 
+      github.event_name == 'workflow_dispatch' && 
+      github.event.inputs.environment == 'production' &&
+      (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped')
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -148,13 +143,11 @@ jobs:
       id: set-tag
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          # Use the provided tag for manual deployments
           echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
-        elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-          # For workflow_run events, use the SHA from the triggering workflow
-          echo "tag=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
         else
-          # Use the full SHA for all other events
-          echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          # For automatic deployments, use the SHA from the build workflow
+          echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
         fi
     
     - name: Pre-deployment checks
@@ -179,7 +172,7 @@ jobs:
         ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
         
         # Deploy script
-        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
           set -e
           cd /opt/audio-extract
           
@@ -190,14 +183,14 @@ jobs:
           git pull origin main
           
           # Set environment variables
-          export AUDIO_EXTRACT_TAG=${{ env.IMAGE_TAG }}
-          export REGISTRY=${{ env.REGISTRY }}
-          export IMAGE_NAME=${{ env.IMAGE_NAME }}
-          export GCS_BUCKET_NAME=${{ env.GCS_BUCKET_NAME }}
-          export AUDIO_EXTRACT_FOLDER_ID=${{ env.AUDIO_EXTRACT_FOLDER_ID }}
+          export AUDIO_EXTRACT_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}"
+          export GCS_BUCKET_NAME="${{ env.GCS_BUCKET_NAME }}"
+          export AUDIO_EXTRACT_FOLDER_ID="${{ env.AUDIO_EXTRACT_FOLDER_ID }}"
+          
+          echo "Deploying image: \${AUDIO_EXTRACT_IMAGE}"
           
           # Pull new image
-          docker-compose -f docker-compose.prod.yml pull
+          docker pull \${AUDIO_EXTRACT_IMAGE}
           
           # Deploy with rolling update
           docker-compose -f docker-compose.prod.yml up -d --no-deps --scale audio-extract=2 audio-extract
@@ -242,37 +235,16 @@ jobs:
         
         echo "All post-deployment checks passed!"
     
-    - name: Create deployment record
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const deployment = await github.rest.repos.createDeployment({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            ref: context.sha,
-            environment: 'production',
-            required_contexts: [],
-            auto_merge: false
-          });
-          
-          await github.rest.repos.createDeploymentStatus({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            deployment_id: deployment.data.id,
-            state: 'success',
-            environment_url: '${{ secrets.PRODUCTION_URL }}',
-            description: 'Deployment successful'
-          });
-    
-    - name: Notify deployment
-      uses: 8398a7/action-slack@v3
-      if: always()
-      with:
-        status: ${{ job.status }}
-        text: |
-          Audio Extract deployed to production!
-          Version: ${{ steps.set-tag.outputs.tag }}
-          Status: ${{ job.status }}
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+    - name: Production deployment summary
+      run: |
+        echo "## Production Deployment Successful" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Image deployed:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** production" >> $GITHUB_STEP_SUMMARY
+        echo "**URL:** ${{ secrets.PRODUCTION_URL }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Time:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Health Check Results" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+        curl -s ${{ secrets.PRODUCTION_URL }}/health | jq '.' >> $GITHUB_STEP_SUMMARY || echo "Failed to fetch health status" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

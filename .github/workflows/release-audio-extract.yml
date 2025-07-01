@@ -1,3 +1,11 @@
+# Create GitHub releases for audio-extract
+#
+# This workflow:
+# - Triggers on version tags (audio-extract-v*)
+# - Creates GitHub releases with changelog
+# - Tags Docker images with version numbers
+# - Attaches configuration examples to releases
+
 name: Release Audio Extract
 
 on:
@@ -43,28 +51,27 @@ jobs:
     - name: Generate changelog
       id: changelog
       run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
         # Get the previous tag
         PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match "audio-extract-v*" HEAD^ 2>/dev/null || echo "")
         
         if [[ -z "$PREVIOUS_TAG" ]]; then
-          echo "No previous tag found, using initial commit"
           PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
         fi
         
-        # Generate changelog
+        # Generate simple changelog
         echo "## What's Changed" > changelog.md
         echo "" >> changelog.md
         
-        # Get commits between tags
-        git log --pretty=format:"* %s by @%an in %h" $PREVIOUS_TAG..HEAD --grep="audio.extract" >> changelog.md || \
-        git log --pretty=format:"* %s by @%an in %h" $PREVIOUS_TAG..HEAD -- audio_extract/ >> changelog.md
+        # Get commits for audio_extract directory
+        git log --pretty=format:"* %s (%h)" $PREVIOUS_TAG..HEAD -- audio_extract/ >> changelog.md
         
         echo "" >> changelog.md
-        echo "## Docker Image" >> changelog.md
         echo "" >> changelog.md
-        echo "Pull the image:" >> changelog.md
+        echo "## Docker Image" >> changelog.md
         echo '```bash' >> changelog.md
-        echo "docker pull ghcr.io/${{ github.repository }}/audio-extract:${{ steps.version.outputs.version }}" >> changelog.md
+        echo "docker pull ghcr.io/${{ github.repository }}/audio-extract:${VERSION}" >> changelog.md
         echo '```' >> changelog.md
         
         # Set output
@@ -90,17 +97,6 @@ jobs:
           docs/ \
           examples/
     
-    - name: Build release binaries
-      run: |
-        cd audio_extract
-        
-        # Create standalone Python package
-        python -m pip install --upgrade pip setuptools wheel
-        python setup.py sdist bdist_wheel
-        
-        # Move to release directory
-        mkdir -p ../release
-        mv dist/* ../release/
     
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
@@ -136,7 +132,6 @@ jobs:
         files: |
           audio-extract-configs.tar.gz
           audio-extract-docs.tar.gz
-          release/*
     
     - name: Update Docker tags
       env:
@@ -164,39 +159,15 @@ jobs:
           docker push $REGISTRY/$IMAGE_NAME:latest
         fi
     
-    - name: Deploy release notes
-      uses: actions/github-script@v7
-      with:
-        script: |
-          // Update repository topics
-          await github.rest.repos.replaceAllTopics({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            names: ['audio-extraction', 'google-meet', 'ffmpeg', 'gcs', 'docker', 'python']
-          });
-          
-          // Create a discussion for the release
-          const discussion = await github.rest.discussions.create({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            category_id: 'announcements',
-            title: `Audio Extract ${context.payload.release.tag_name} Released!`,
-            body: `A new version of Audio Extract has been released!\n\n${context.payload.release.body}`
-          });
-    
-    - name: Trigger deployment
-      if: steps.version.outputs.is_prerelease == 'false'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          // Trigger production deployment workflow
-          await github.rest.actions.createWorkflowDispatch({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            workflow_id: 'deploy-audio-extract.yml',
-            ref: 'main',
-            inputs: {
-              environment: 'production',
-              image_tag: '${{ steps.version.outputs.version }}'
-            }
-          });
+    - name: Release summary
+      run: |
+        echo "## Release Created" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Docker Image:** \`ghcr.io/${{ github.repository }}/audio-extract:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Pre-release:** ${{ steps.version.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "To deploy this release to production:" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "gh workflow run deploy-audio-extract.yml -f environment=production -f image_tag=${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
