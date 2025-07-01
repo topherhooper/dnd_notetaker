@@ -1,6 +1,8 @@
 name: Deploy Audio Extract
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_run:
     workflows: ["Build Audio Extract"]
     types:
@@ -28,8 +30,10 @@ env:
 jobs:
   deploy-staging:
     if: |
+      github.event_name == 'pull_request' ||
       github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging' ||
-      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && 
+       (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master'))
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -41,9 +45,12 @@ jobs:
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+          # For workflow_run events, use the SHA from the triggering workflow
+          echo "tag=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
         else
-          # Use the SHA tag format that matches the build workflow
-          echo "tag=sha-$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
+          # Use the full SHA for all other events
+          echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
         fi
     
     - name: Deploy to staging
@@ -101,20 +108,35 @@ jobs:
     
     - name: Notify deployment
       uses: actions/github-script@v7
+      if: github.event_name == 'pull_request' || (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
       with:
         script: |
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: '🚀 Deployed to **staging** environment!\n\nImage: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}`'
-          })
+          let pr_number;
+          if (context.eventName === 'pull_request') {
+            pr_number = context.payload.pull_request.number;
+          } else if (context.eventName === 'workflow_run') {
+            pr_number = context.payload.workflow_run.pull_requests[0]?.number;
+          }
+          
+          if (pr_number) {
+            github.rest.issues.createComment({
+              issue_number: pr_number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚀 Deployed to **staging** environment!\n\nImage: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.set-tag.outputs.tag }}`'
+            });
+          }
 
   deploy-production:
     needs: deploy-staging
     if: |
-      github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' ||
-      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+      github.event_name != 'pull_request' && (
+        github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' ||
+        (github.event_name == 'workflow_run' && 
+         github.event.workflow_run.conclusion == 'success' && 
+         github.event.workflow_run.event != 'pull_request' &&
+         (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master'))
+      )
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -126,9 +148,12 @@ jobs:
       run: |
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+          # For workflow_run events, use the SHA from the triggering workflow
+          echo "tag=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
         else
-          # Use the SHA tag format that matches the build workflow
-          echo "tag=sha-$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
+          # Use the full SHA for all other events
+          echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
         fi
     
     - name: Pre-deployment checks

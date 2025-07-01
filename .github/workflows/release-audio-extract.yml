@@ -147,7 +147,7 @@ jobs:
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
         
         # Pull the SHA-tagged image
-        SHA_TAG="sha-${GITHUB_SHA::7}"
+        SHA_TAG="${GITHUB_SHA}"
         docker pull $REGISTRY/$IMAGE_NAME:$SHA_TAG
         
         # Tag with version
