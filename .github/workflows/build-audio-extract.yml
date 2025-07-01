@@ -2,7 +2,7 @@ name: Build Audio Extract
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master]
     tags:
       - 'audio-extract-v*'
     paths:
@@ -55,7 +55,7 @@ jobs:
           type=ref,event=pr
           type=sha,format=long
           type=sha,format=short,prefix=sha-
-          type=raw,value={{branch}}-{{sha}},enable=${{ github.ref_type == 'branch' }}
+          type=raw,value={{sha}}
           type=semver,pattern={{version}},prefix=v
           type=semver,pattern={{major}}.{{minor}},prefix=v
           type=raw,value=latest,enable={{is_default_branch}}
