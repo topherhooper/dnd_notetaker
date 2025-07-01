@@ -77,7 +77,7 @@ jobs:
     - name: Test the built image
       if: github.event_name == 'pull_request'
       run: |
-        docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }} --help
+        docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}{{sha}} --help
     
     - name: Generate build summary
       if: github.event_name != 'pull_request'
