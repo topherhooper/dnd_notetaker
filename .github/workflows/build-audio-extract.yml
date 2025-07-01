@@ -23,6 +23,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/audio-extract
+  SHA_TAG: ${{env.IMAGE_NAME}}:${{ github.event.pull_request.head.sha }}
 
 jobs:
   build-and-push:
@@ -64,7 +65,7 @@ jobs:
         context: ./audio_extract
         file: ./audio_extract/Dockerfile
         push: ${{ github.event_name != 'pull_request' }}
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ env.SHA_TAG }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -74,7 +75,7 @@ jobs:
     - name: Test the built image
       if: github.event_name == 'pull_request'
       run: |
-        docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:{{sha}} --help
+        docker run --rm ${{ env.SHA_TAG }} --help
     
     - name: Generate build summary
       if: github.event_name != 'pull_request'

@@ -26,6 +26,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/audio-extract
+  SHA_TAG: ${{env.IMAGE_NAME}}:${{ github.event.pull_request.head.sha }}
 
 jobs:
   deploy-staging:
