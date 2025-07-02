@@ -1,9 +1,9 @@
 services:
   meet-notes:
-    image: ghcr.io/topherhooper/dnd_notetaker/audio-extract:latest
+    image: ${AUDIO_EXTRACT_IMAGE:-ghcr.io/topherhooper/dnd_notetaker/audio-extract:latest}
     container_name: meet-notes-processor
     ports:
-      - "8081:8080"
+      - "${AUDIO_EXTRACT_PORT:-8081}:8080"
     volumes:
       - ./meet_notes_configs:/meet_notes_configs/
       - ./meet_notes_output:/meet_notes_output
