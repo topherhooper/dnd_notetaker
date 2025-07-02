@@ -120,8 +120,8 @@ jobs:
         ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
           set -e
           
-          # Create PR-specific deployment directory
-          PR_DIR="/opt/audio-extract-pr-${PR_NUMBER}"
+          # Create PR-specific deployment directory in user's home
+          PR_DIR="/home/${DEPLOY_USER}/audio-extract-pr-${PR_NUMBER}"
           mkdir -p \${PR_DIR}
           cd \${PR_DIR}
           
@@ -273,7 +273,7 @@ jobs:
         ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
           set -e
           
-          PR_DIR="/opt/audio-extract-pr-${PR_NUMBER}"
+          PR_DIR="/home/${DEPLOY_USER}/audio-extract-pr-${PR_NUMBER}"
           
           if [ -d "\${PR_DIR}" ]; then
             cd \${PR_DIR}
