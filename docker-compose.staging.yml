@@ -1,0 +1,19 @@
+services:
+  meet-notes:
+    image: ghcr.io/topherhooper/dnd_notetaker/audio-extract:latest
+    container_name: meet-notes-processor
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./meet_notes_configs:/meet_notes_configs/
+      - ./meet_notes_output:/meet_notes_output
+    environment:
+      - MEET_NOTES_CONFIG=/meet_notes_configs/config.json
+    working_dir: /app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
