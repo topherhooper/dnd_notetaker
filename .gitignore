@@ -190,3 +190,9 @@ __pycache__/utils.cpython-38.pyc
 .meet_notes/discord_config.json
 .meet_notes/discord_config.json.example
 .meet_notes/service_account.json
+
+google-cloud-sdk/*
+deployment/github-secrets.txt
+deployment/github-actions-sa-key.json
+deployment/github-actions-key.pub
+deployment/github-actions-key

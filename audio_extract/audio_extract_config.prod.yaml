@@ -1,0 +1,122 @@
+# Production Configuration for audio_extract
+# Usage: python -m audio_extract.monitor --config audio_extract_config.prod.yaml
+
+# Environment identifier
+environment: production
+
+google_drive:
+  # Path to service account JSON file
+  # Can also be set via GOOGLE_APPLICATION_CREDENTIALS env var
+  service_account_file: /etc/audio-extract/credentials.json
+  
+  # Google Drive folder ID to monitor for Meet recordings
+  # Get this from the folder URL: https://drive.google.com/drive/folders/FOLDER_ID
+  recordings_folder_id: "${AUDIO_EXTRACT_FOLDER_ID}"  # From environment
+  
+  # How often to check for new recordings (in seconds)
+  check_interval_seconds: 300  # 5 minutes
+  
+  # How many days back to look for recordings
+  days_to_look_back: 7
+  
+  # Temporary directory for downloading videos (optional)
+  download_temp_dir: /var/tmp/audio_extract
+
+processing:
+  # Directory where extracted audio files will be saved
+  output_directory: /var/audio_extract/output
+  
+  # Whether to delete the video file after extracting audio
+  delete_video_after_processing: true  # Save space in prod
+  
+  # Audio extraction settings
+  audio_format:
+    bitrate: 192k  # Higher quality in prod
+    sample_rate: 44100
+    channels: 1  # Mono for smaller files
+    
+  # Max file size to process (in MB)
+  max_file_size_mb: 5000  # 5GB limit
+  
+  # Number of parallel downloads
+  max_parallel_downloads: 3  # Parallel processing
+
+monitoring:
+  # Enable the web dashboard
+  enable_dashboard: false  # No dashboard in prod
+  
+  # Logging configuration
+  log_level: INFO  # Less verbose in prod
+  log_to_console: false  # Only to file in prod
+  log_file: /var/log/audio-extract/audio-extract.log
+  log_max_size_mb: 100
+  log_backup_count: 5
+  
+  # Path to the SQLite database for tracking processed files
+  database_path: /var/audio_extract/data/processed.db
+  
+  # Email notifications on failure
+  notifications:
+    email:
+      enabled: true
+      smtp_host: "${SMTP_HOST}"  # From environment
+      smtp_port: 587
+      smtp_user: "${SMTP_USER}"
+      smtp_password: "${SMTP_PASSWORD}"
+      from_address: "audio-extract@example.com"
+      to_addresses: 
+        - "ops@example.com"
+        - "${ALERT_EMAIL}"  # Additional from environment
+      on_failure: true
+      on_success: false  # Don't email on success
+      failure_threshold: 1  # Email on first failure
+  
+# Runtime behavior
+behavior:
+  # Run mode: 'foreground' or 'background'
+  run_mode: background  # Daemon mode in prod
+  
+  # Retry configuration
+  retry_failed_files: true
+  retry_attempts: 3
+  retry_delay_seconds: 300  # 5 minutes
+  
+  # Error handling
+  stop_on_error: false
+  
+  # Performance
+  download_chunk_size_mb: 32  # Larger chunks for efficiency
+  
+  # Cleanup
+  cleanup_old_records_days: 90  # Clean records older than 90 days
+  cleanup_schedule: "0 2 * * *"  # Run at 2 AM daily
+
+# Storage configuration  
+storage:
+  # Storage type: 'local' or 'gcs'
+  # In production with gcsfuse, use 'local' type since GCS appears as filesystem
+  type: local
+  
+  # Local storage settings
+  local:
+    # When using gcsfuse, this points to the mounted GCS bucket
+    path: /mnt/audio-extracts/prod
+    # Fallback for non-containerized deployments
+    fallback_path: /var/audio_extract/output
+    
+  # GCS mount configuration (used by docker-entrypoint.sh)
+  gcs_mount:
+    enabled: true  # Always use GCS in production
+    bucket_name: "${GCS_BUCKET_NAME}"  # From environment
+    mount_point: /mnt/audio-extracts
+    mount_options: "--implicit-dirs --dir-mode=755 --file-mode=644 --stat-cache-ttl=10m --type-cache-ttl=10m"
+    # Production optimizations:
+    # - stat-cache-ttl: Cache file metadata for 10 minutes
+    # - type-cache-ttl: Cache file type info for 10 minutes
+    
+  # Direct GCS API settings (fallback if gcsfuse fails)
+  gcs:
+    bucket_name: "${GCS_BUCKET_NAME}"  # From environment
+    credentials_path: "${GCS_CREDENTIALS_PATH:-/etc/audio-extract/gcs-credentials.json}"
+    public_access: false  # Use signed URLs for security
+    url_expiration_hours: 168  # 1 week

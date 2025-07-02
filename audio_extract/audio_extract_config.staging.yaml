@@ -1,0 +1,117 @@
+# Staging Configuration for audio_extract
+# A middle ground between dev and prod configurations
+
+# Environment identifier
+environment: staging
+
+google_drive:
+  # Path to service account JSON file
+  service_account_file: /app/credentials/service-account.json
+  
+  # Google Drive folder ID to monitor (staging folder)
+  recordings_folder_id: "${AUDIO_EXTRACT_FOLDER_ID_STAGING}"
+  
+  # Check interval - more frequent than prod, less than dev
+  check_interval_seconds: 120  # 2 minutes
+  
+  # How many days back to look for recordings
+  days_to_look_back: 3
+  
+  # Temporary directory for downloading videos
+  download_temp_dir: /tmp/audio_extract_staging
+
+processing:
+  # Directory where extracted audio files will be saved
+  output_directory: /mnt/audio-extracts/staging
+  
+  # Delete video after processing to save space
+  delete_video_after_processing: true
+  
+  # Audio extraction settings
+  audio_format:
+    bitrate: 160k  # Between dev and prod
+    sample_rate: 44100
+    channels: 1
+    
+  # Max file size to process (in MB)
+  max_file_size_mb: 2000  # 2GB limit
+  
+  # Number of parallel downloads
+  max_parallel_downloads: 2
+
+monitoring:
+  # Enable dashboard for staging
+  enable_dashboard: true
+  dashboard_port: 8080
+  dashboard_open_browser: false
+  
+  # Logging configuration
+  log_level: INFO
+  log_to_console: true
+  log_file: /app/logs/audio-extract-staging.log
+  log_max_size_mb: 50
+  log_backup_count: 3
+  
+  # Database path
+  database_path: /app/data/processed_staging.db
+  
+  # Email notifications (errors only)
+  notifications:
+    email:
+      enabled: true
+      smtp_host: "${SMTP_HOST}"
+      smtp_port: 587
+      smtp_user: "${SMTP_USER}"
+      smtp_password: "${SMTP_PASSWORD}"
+      from_address: "audio-extract-staging@example.com"
+      to_addresses: 
+        - "${ALERT_EMAIL_STAGING}"
+      on_failure: true
+      on_success: false
+      failure_threshold: 2  # Alert after 2 failures
+
+# Runtime behavior
+behavior:
+  # Run in background but with verbose logging
+  run_mode: background
+  
+  # Retry configuration
+  retry_failed_files: true
+  retry_attempts: 2
+  retry_delay_seconds: 180  # 3 minutes
+  
+  # Error handling
+  stop_on_error: false
+  show_full_traceback: true
+  
+  # Performance
+  download_chunk_size_mb: 20
+  
+  # Cleanup
+  cleanup_old_records_days: 30
+  cleanup_schedule: "0 3 * * *"  # 3 AM daily
+
+# Storage configuration  
+storage:
+  # Use local type with gcsfuse mount
+  type: local
+  
+  # Local storage settings
+  local:
+    # Points to gcsfuse mount
+    path: /mnt/audio-extracts/staging
+    fallback_path: /app/output
+    
+  # GCS mount configuration
+  gcs_mount:
+    enabled: true
+    bucket_name: "${GCS_BUCKET_NAME_STAGING}"
+    mount_point: /mnt/audio-extracts
+    mount_options: "--implicit-dirs --dir-mode=755 --file-mode=644 --stat-cache-ttl=5m"
+    
+  # Direct GCS API (fallback)
+  gcs:
+    bucket_name: "${GCS_BUCKET_NAME_STAGING}"
+    credentials_path: "/app/credentials/gcs-service-account.json"
+    public_access: false
+    url_expiration_hours: 72  # 3 days

@@ -1,0 +1,190 @@
+# Create GitHub releases for audio-extract
+#
+# This workflow:
+# - Triggers on version tags (audio-extract-v*)
+# - Creates GitHub releases with changelog
+# - Tags Docker images with version numbers
+# - Attaches configuration examples to releases
+
+name: Release Audio Extract
+
+on:
+  push:
+    tags:
+      # Trigger on version tags (e.g., audio-extract-v1.2.3)
+      - 'audio-extract-v*'
+  workflow_dispatch:
+    # Manual release creation for flexibility
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.2.3)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      # Need write access to create releases
+      contents: write
+      # Need write access to push Docker tags
+      packages: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # Full history needed to generate changelog between tags
+        fetch-depth: 0
+    
+    - name: Set version
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          # Manual trigger: use provided version with 'v' prefix
+          echo "version=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          echo "is_prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
+        else
+          # Tag trigger: extract version from tag name
+          # e.g., refs/tags/audio-extract-v1.2.3 -> v1.2.3
+          echo "version=${GITHUB_REF#refs/tags/audio-extract-}" >> $GITHUB_OUTPUT
+          echo "is_prerelease=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Find the previous release tag for comparison
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match "audio-extract-v*" HEAD^ 2>/dev/null || echo "")
+        
+        if [[ -z "$PREVIOUS_TAG" ]]; then
+          # First release - use initial commit
+          PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
+        fi
+        
+        # Generate changelog from git history
+        echo "## What's Changed" > changelog.md
+        echo "" >> changelog.md
+        
+        # List commits affecting audio_extract since last release
+        # Format: * commit message (short hash)
+        git log --pretty=format:"* %s (%h)" $PREVIOUS_TAG..HEAD -- audio_extract/ >> changelog.md
+        
+        echo "" >> changelog.md
+        echo "" >> changelog.md
+        # Add Docker pull command for convenience
+        echo "## Docker Image" >> changelog.md
+        echo '```bash' >> changelog.md
+        echo "docker pull ghcr.io/${{ github.repository }}/audio-extract:${VERSION}" >> changelog.md
+        echo '```' >> changelog.md
+        
+        # Output changelog for use in release body
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        cat changelog.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Create configuration archive
+      run: |
+        cd audio_extract
+        # Archive configuration files for easy deployment setup
+        # Users can extract this to get all necessary configs
+        tar -czf ../audio-extract-configs.tar.gz \
+          audio_extract_config.*.yaml \
+          docker-compose*.yml \
+          nginx.conf \
+          requirements*.txt \
+          Makefile
+    
+    - name: Create documentation archive
+      run: |
+        cd audio_extract
+        # Archive documentation for offline reference
+        tar -czf ../audio-extract-docs.tar.gz \
+          README.md \
+          docs/ \
+          examples/
+    
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: audio-extract-${{ steps.version.outputs.version }}
+        name: Audio Extract ${{ steps.version.outputs.version }}
+        body: |
+          # Audio Extract ${{ steps.version.outputs.version }}
+          
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ## Installation
+          
+          ### Docker
+          ```bash
+          docker pull ghcr.io/${{ github.repository }}/audio-extract:${{ steps.version.outputs.version }}
+          ```
+          
+          ### Python Package
+          ```bash
+          pip install audio-extract==${{ steps.version.outputs.version }}
+          ```
+          
+          ## Configuration
+          
+          See the attached configuration files for examples of development and production setups.
+          
+          ## Documentation
+          
+          Full documentation is available in the `audio-extract-docs.tar.gz` archive.
+        draft: false
+        prerelease: ${{ steps.version.outputs.is_prerelease }}
+        files: |
+          audio-extract-configs.tar.gz
+          audio-extract-docs.tar.gz
+    
+    - name: Update Docker tags
+      env:
+        REGISTRY: ghcr.io
+        IMAGE_NAME: ${{ github.repository }}/audio-extract
+      run: |
+        # Login to registry
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
+        
+        # Pull the SHA-tagged image that was built earlier
+        SHA_TAG="sha-${GITHUB_SHA}"
+        docker pull $REGISTRY/$IMAGE_NAME:$SHA_TAG
+        
+        # Re-tag with version number for this release
+        docker tag $REGISTRY/$IMAGE_NAME:$SHA_TAG $REGISTRY/$IMAGE_NAME:${{ steps.version.outputs.version }}
+        
+        # Update 'latest' tag only for stable releases
+        # Pre-releases don't update latest to avoid breaking users
+        if [[ "${{ steps.version.outputs.is_prerelease }}" == "false" ]]; then
+          docker tag $REGISTRY/$IMAGE_NAME:$SHA_TAG $REGISTRY/$IMAGE_NAME:latest
+        fi
+        
+        # Push the new tags to registry
+        docker push $REGISTRY/$IMAGE_NAME:${{ steps.version.outputs.version }}
+        if [[ "${{ steps.version.outputs.is_prerelease }}" == "false" ]]; then
+          docker push $REGISTRY/$IMAGE_NAME:latest
+        fi
+    
+    - name: Release summary
+      run: |
+        # Create summary with deployment instructions
+        echo "## Release Created" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Docker Image:** \`ghcr.io/${{ github.repository }}/audio-extract:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Pre-release:** ${{ steps.version.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        # Include deployment command for convenience
+        echo "To deploy this release to production:" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "gh workflow run deploy-audio-extract.yml -f environment=production -f image_tag=${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

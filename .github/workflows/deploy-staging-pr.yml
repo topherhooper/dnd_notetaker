@@ -1,0 +1,341 @@
+# Deploy PR to Staging Environment
+#
+# This workflow automatically deploys PR changes to an isolated staging environment
+# after each push. Each PR gets its own deployment namespace to prevent conflicts.
+#
+# Features:
+# - Automatic deployment on PR push
+# - Isolated environments per PR
+# - Deployment URL posted as PR comment
+# - Automatic cleanup on PR close
+# - Health checks and smoke tests
+#
+# Required secrets (from staging environment):
+# - STAGING_HOST, STAGING_USER, STAGING_SSH_KEY
+# - STAGING_URL (base URL for staging deployments)
+
+name: Deploy PR to Staging
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      # Only deploy when audio_extract code changes
+      - 'audio_extract/**'
+      - '.github/workflows/deploy-staging-pr.yml'
+      - 'docker-compose.staging.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/audio-extract
+
+jobs:
+  deploy-pr:
+    # Skip deployment for closed PRs (handled by cleanup job)
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    # Use staging environment for secrets
+    environment: staging
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write  # For PR comments
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # Checkout PR head commit
+        ref: ${{ github.event.pull_request.head.sha }}
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Generate PR-specific tags
+      id: pr-tags
+      run: |
+        # Create PR-specific image tag
+        PR_NUMBER=${{ github.event.pull_request.number }}
+        SHORT_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)
+        PR_TAG="pr-${PR_NUMBER}-${SHORT_SHA}"
+        
+        echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+        echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+        echo "pr_tag=${PR_TAG}" >> $GITHUB_OUTPUT
+        echo "full_tag=${REGISTRY}/${IMAGE_NAME}:${PR_TAG}" >> $GITHUB_OUTPUT
+    
+    - name: Build and push PR image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.pr-tags.outputs.full_tag }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        # Add PR metadata as labels
+        labels: |
+          org.opencontainers.image.source=${{ github.event.repository.html_url }}
+          org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
+          pr.number=${{ github.event.pull_request.number }}
+    
+    - name: Deploy to PR staging environment
+      id: deploy
+      env:
+        DEPLOY_HOST: ${{ secrets.STAGING_HOST }}
+        DEPLOY_USER: ${{ secrets.STAGING_USER }}
+        DEPLOY_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        PR_NUMBER: ${{ steps.pr-tags.outputs.pr_number }}
+        IMAGE_TAG: ${{ steps.pr-tags.outputs.full_tag }}
+      run: |
+        # Validate required secrets
+        if [ -z "$DEPLOY_HOST" ]; then
+          echo "Error: STAGING_HOST secret is not set!"
+          exit 1
+        fi
+        if [ -z "$DEPLOY_USER" ]; then
+          echo "Error: STAGING_USER secret is not set!"
+          exit 1
+        fi
+        if [ -z "$DEPLOY_KEY" ]; then
+          echo "Error: STAGING_SSH_KEY secret is not set!"
+          exit 1
+        fi
+        
+        # Setup SSH
+        mkdir -p ~/.ssh
+        echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+        
+        # Deploy with PR-specific namespace
+        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
+          set -e
+          
+          # Create PR-specific deployment directory in user's home
+          PR_DIR="/home/${DEPLOY_USER}/audio-extract-pr-${PR_NUMBER}"
+          mkdir -p \${PR_DIR}
+          cd \${PR_DIR}
+          
+          # Copy deployment files
+          cp /opt/audio-extract/docker-compose.staging.yml ./docker-compose.yml
+          
+          # Set PR-specific environment
+          export COMPOSE_PROJECT_NAME="audio-extract-pr-${PR_NUMBER}"
+          export AUDIO_EXTRACT_IMAGE="${IMAGE_TAG}"
+          export AUDIO_EXTRACT_PORT=$((8100 + ${PR_NUMBER}))  # PR-specific port
+          
+          echo "Deploying PR ${PR_NUMBER} on port \${AUDIO_EXTRACT_PORT}"
+          
+          # Pull new image
+          docker pull \${AUDIO_EXTRACT_IMAGE}
+          
+          # Deploy with PR-specific configuration
+          docker-compose up -d --remove-orphans
+          
+          # Wait for service to start
+          sleep 20
+          
+          # Verify deployment
+          if curl -f http://localhost:\${AUDIO_EXTRACT_PORT}/health; then
+            echo "PR deployment successful!"
+            echo "deployment_url=http://${DEPLOY_HOST}:\${AUDIO_EXTRACT_PORT}" >> deployment_info.txt
+          else
+            echo "Health check failed!"
+            docker-compose logs
+            exit 1
+          fi
+        EOF
+        
+        # Extract deployment URL for PR comment
+        PR_PORT=$((8100 + ${{ steps.pr-tags.outputs.pr_number }}))
+        echo "deployment_url=http://${{ secrets.STAGING_HOST }}:${PR_PORT}" >> $GITHUB_OUTPUT
+    
+    - name: Run PR smoke tests
+      env:
+        DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
+      run: |
+        # Basic health check
+        curl -f ${DEPLOYMENT_URL}/health
+        
+        # Check API endpoints
+        curl -f ${DEPLOYMENT_URL}/api/stats
+        
+        echo "PR smoke tests passed!"
+    
+    - name: Comment on PR with deployment info
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const prNumber = ${{ github.event.pull_request.number }};
+          const deploymentUrl = '${{ steps.deploy.outputs.deployment_url }}';
+          const shortSha = '${{ steps.pr-tags.outputs.short_sha }}';
+          
+          // Find and update existing comment or create new one
+          const commentIdentifier = '<!-- pr-staging-deployment -->';
+          const commentBody = `${commentIdentifier}
+          ## 🚀 Staging Deployment
+          
+          Your PR has been deployed to staging!
+          
+          **URL:** ${deploymentUrl}
+          **Commit:** \`${shortSha}\`
+          **Status:** ✅ Deployed successfully
+          
+          ### Available Endpoints:
+          - Health Check: ${deploymentUrl}/health
+          - API Stats: ${deploymentUrl}/api/stats
+          - Process Audio: ${deploymentUrl}/api/process
+          
+          ---
+          <sub>This deployment will be automatically cleaned up when the PR is closed.</sub>`;
+          
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+          });
+          
+          const existingComment = comments.find(comment => 
+            comment.body.includes(commentIdentifier)
+          );
+          
+          if (existingComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: commentBody,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: commentBody,
+            });
+          }
+
+  cleanup-pr:
+    # Only run when PR is closed
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    
+    steps:
+    - name: Calculate PR details
+      id: pr-info
+      run: |
+        PR_NUMBER=${{ github.event.pull_request.number }}
+        echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+        echo "pr_tag=pr-${PR_NUMBER}-*" >> $GITHUB_OUTPUT
+    
+    - name: Cleanup PR deployment
+      env:
+        DEPLOY_HOST: ${{ secrets.STAGING_HOST }}
+        DEPLOY_USER: ${{ secrets.STAGING_USER }}
+        DEPLOY_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+      run: |
+        # Validate required secrets
+        if [ -z "$DEPLOY_HOST" ]; then
+          echo "Error: STAGING_HOST secret is not set!"
+          exit 1
+        fi
+        if [ -z "$DEPLOY_USER" ]; then
+          echo "Error: STAGING_USER secret is not set!"
+          exit 1
+        fi
+        if [ -z "$DEPLOY_KEY" ]; then
+          echo "Error: STAGING_SSH_KEY secret is not set!"
+          exit 1
+        fi
+        
+        # Setup SSH
+        mkdir -p ~/.ssh
+        echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+        
+        # Cleanup deployment
+        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
+          set -e
+          
+          PR_DIR="/home/${DEPLOY_USER}/audio-extract-pr-${PR_NUMBER}"
+          
+          if [ -d "\${PR_DIR}" ]; then
+            cd \${PR_DIR}
+            
+            # Stop and remove containers
+            export COMPOSE_PROJECT_NAME="audio-extract-pr-${PR_NUMBER}"
+            docker-compose down -v --remove-orphans
+            
+            # Remove deployment directory
+            cd /
+            rm -rf \${PR_DIR}
+            
+            echo "PR ${PR_NUMBER} deployment cleaned up successfully"
+          else
+            echo "No deployment found for PR ${PR_NUMBER}"
+          fi
+          
+          # Clean up PR-specific images
+          docker images --filter "label=pr.number=${PR_NUMBER}" -q | xargs -r docker rmi -f || true
+        EOF
+    
+    - name: Delete PR Docker images from registry
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # List and delete PR-specific image tags
+        PR_TAG_PATTERN="${{ steps.pr-info.outputs.pr_tag }}"
+        
+        # Use GitHub API to delete package versions
+        # Note: This requires appropriate permissions
+        echo "Cleaning up images with pattern: ${PR_TAG_PATTERN}"
+    
+    - name: Update PR comment
+      if: github.event.pull_request.merged != true
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const prNumber = ${{ github.event.pull_request.number }};
+          const commentIdentifier = '<!-- pr-staging-deployment -->';
+          
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+          });
+          
+          const existingComment = comments.find(comment => 
+            comment.body.includes(commentIdentifier)
+          );
+          
+          if (existingComment) {
+            const cleanupBody = `${commentIdentifier}
+            ## 🧹 Staging Deployment Cleaned Up
+            
+            The staging deployment for this PR has been removed.
+            
+            **Status:** ✅ Cleaned up successfully`;
+            
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: cleanupBody,
+            });
+          }

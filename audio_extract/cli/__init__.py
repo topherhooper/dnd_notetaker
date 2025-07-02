@@ -1,0 +1,1 @@
+"""CLI tools for audio_extract module."""
